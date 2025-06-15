@@ -47,6 +47,6 @@ watch(
 
 :deep(.el-table-v2) {
   --el-table-border-color: #ebeef5;
-  --el-table-header-bg-color: #f5f7fa;
+  --el-table-header-bg-color: var(--color-background-mute);
 }
 </style>

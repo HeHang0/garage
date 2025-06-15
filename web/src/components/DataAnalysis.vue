@@ -265,14 +265,12 @@ const handleDataFetch = async (type: 'income' | 'behavior' | 'plate') => {
   try {
     const url = `/api/${type === 'plate' ? 'area' : type}`;
     const response = await request.get(url);
-    console.log('得到的数据', response);
     tableData[type] = response;
   } catch (error) {
     console.error('获取数据失败:', error);
   } finally {
     loading.value = false;
   }
-  console.log('啦啦啦', tableData);
 };
 
 // 下载处理
@@ -289,12 +287,14 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
 .analysis-container {
   width: 100%;
   height: 100vh;
-  background-color: #f5f7fa;
+  background-color: var(--color-background);
+  --el-text-color-primary: var(--color-text);
+  --el-text-color-regular: var(--color-text);
 }
 
 .tab-content {
   padding: 20px;
-  background-color: #fff;
+  background-color: var(--color-background-soft);
   border-radius: 4px;
   min-height: calc(100vh - 40px);
   margin: 20px;
@@ -317,7 +317,7 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
 .result-container {
   margin-top: 20px;
   padding: 20px;
-  background-color: #f8f9fa;
+  background-color: var(--color-background-mute);
   border-radius: 4px;
   white-space: pre-wrap;
   font-family: monospace;
@@ -340,13 +340,31 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
 }
 
 :deep(.el-tabs__item.is-active) {
-  color: #409eff;
+  /* color: #409eff; */
   font-weight: bold;
+}
+
+:deep(.el-tabs--card > .el-tabs__header .el-tabs__item.is-active) {
+  border-bottom-color: var(--color-background-soft);
 }
 
 :deep(.el-tabs__nav-wrap::after) {
   height: 1px;
-  background-color: #e4e7ed;
+  background-color: var(--color-border);
+}
+
+:deep(.el-tabs--card > .el-tabs__header .el-tabs__item),
+:deep(.el-tabs--card > .el-tabs__header .el-tabs__nav) {
+  border-bottom-color: var(--color-background-soft);
+  height: var(--el-tabs-header-height);
+}
+
+:deep(.el-input__wrapper) {
+  background-color: var(--color-background-mute);
+}
+
+:deep(.el-select__wrapper) {
+  background-color: var(--color-background-mute);
 }
 
 :deep(.el-tabs__content) {
@@ -355,5 +373,35 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
 
 :deep(.el-tab-pane) {
   height: calc(100% - 20px);
+}
+
+:deep(.el-table-v2__main) {
+  background-color: var(--color-background-mute);
+  border-radius: 4px;
+}
+
+:deep(.el-table-v2__header-row) {
+  border-bottom: 1px solid var(--color-border);
+}
+:deep(.el-table-v2__row:hover) {
+  background-color: var(--color-border-hover) !important;
+}
+:deep(.el-table-v2__row) {
+  border-color: var(--color-border) !important;
+}
+:deep(.el-table-v2__header-cell) {
+  background-color: transparent !important;
+}
+</style>
+<style>
+.el-popper__arrow:before,
+.el-select__popper.el-popper {
+  background-color: var(--color-background-mute) !important;
+}
+.el-select-dropdown__item.is-selected {
+  background-color: var(--color-border-hover);
+}
+.el-select-dropdown__item.is-hovering {
+  background-color: var(--color-border);
 }
 </style>

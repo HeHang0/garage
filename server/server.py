@@ -97,7 +97,7 @@ def get_cph():
         d = analyze_single_vehicle(_df.copy(), _user_df.copy(), cph_list[0])
         summary_text = ""
         for key, value in d.items():
-            summary_text += f"\t{key}: {value or ''}\n"
+            summary_text += f"{key}: {value or ''}\n"
     else:
         d = compare_multiple_vehicles(_df.copy(), _user_df.copy(), cph_list)
         summary_text = pretty_compare_output(d)
