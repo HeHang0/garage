@@ -133,6 +133,7 @@ import { ElMessage } from 'element-plus';
 import DataTable from './DataTable.vue';
 import RecordTable from './RecordTable.vue';
 import dayjs from 'dayjs';
+import { columns_data_to_table_data } from '@/utils/tools';
 
 const activeTab = ref('query');
 const searchType = ref('cph');
@@ -194,6 +195,15 @@ const dateShortcuts = [
       start.setTime(start.getTime() - 3600 * 1000 * 24 * 365 * 2);
       return [start, end];
     }
+  },
+  {
+    text: '最近三年',
+    value: () => {
+      const end = new Date();
+      const start = new Date();
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 365 * 3);
+      return [start, end];
+    }
   }
 ];
 
@@ -219,7 +229,7 @@ const handleRecordSearch = async () => {
   loading.value = true;
   try {
     const [start, end] = recordSearch.dateRange;
-    const response = await request.get('/api/record', {
+    const response: any = await request.get('/api/record', {
       params: {
         cph: recordSearch.cph || '',
         name: recordSearch.name || '',
@@ -227,7 +237,10 @@ const handleRecordSearch = async () => {
         end: dayjs(end).format('YYYY-MM-DD')
       }
     });
-    recordData.value = Array.isArray(response) ? response : [response];
+    recordData.value = columns_data_to_table_data(
+      response.columns,
+      response.data
+    );
   } catch (error) {
     console.error('获取记录失败:', error);
   } finally {

@@ -45,7 +45,11 @@ def df_to_dict(df):
     # valid_keys = columns_map.keys() & df.columns
     # # 构造有效的重命名字典
     # valid_columns_map = {k: columns_map[k] for k in valid_keys}
-    return df.rename(columns=columns_map).to_dict(orient='records')
+    df = df.rename(columns=columns_map)
+    return {
+        "data": df.values.tolist(),
+        "columns": df.columns.tolist()
+    }
 
 def record_data(df, user_df, cph_list, name, start, end):
     if (not cph_list or len(cph_list) == 0) and not name:

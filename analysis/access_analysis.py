@@ -1,4 +1,5 @@
 import json
+from math import isnan
 
 
 def analyze_user(df_io, df_info, text):
@@ -6,6 +7,7 @@ def analyze_user(df_io, df_info, text):
     return compare_multiple_vehicles(df_io, df_info, cph_list)
 
 def analyze_single_vehicle(df_io, df_info, cph):
+    cph = cph.strip() if cph else ''
     df_car = df_io[df_io['CPH'] == cph].copy()
     if df_car.empty:
         return {}
@@ -22,8 +24,9 @@ def analyze_single_vehicle(df_io, df_info, cph):
 
     # 停车时长
     max_duration = df_car['StayHour'].max()
-    avg_duration = df_car[df_car['StayHour'] > 1]['StayHour'].mean().round(1)
-
+    avg_duration = round(df_car[df_car['StayHour'] > 1]['StayHour'].mean(), 1)
+    max_duration = max_duration if max_duration and not isnan(max_duration) else 0
+    avg_duration = avg_duration if avg_duration and not isnan(avg_duration) else 0
     # 出入口偏好
     in_gates = df_car[
         df_car['InGateName'].notnull() &

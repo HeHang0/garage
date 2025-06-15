@@ -3,6 +3,7 @@ import os
 
 from flask import Flask, jsonify, request, Response, send_file, send_from_directory
 from flask_cors import CORS
+import gzip
 
 from analysis.access_analysis import analyze_user, pretty_compare_output, analyze_single_vehicle, \
     compare_multiple_vehicles
@@ -17,11 +18,14 @@ CORS(app, origins=["http://localhost:5173", "https://hk.picapico.top"])
 _df, _user_df = get_data()
 
 def api_response(data="", message="success", status=200):
-    return Response(json.dumps({
+    data = json.dumps({
         "status": status,
         "message": message,
         "data": data
-    }, ensure_ascii=False), content_type='application/json; charset=utf-8')
+    }, ensure_ascii=False)
+    return Response(gzip.compress(data.encode('utf-8')),
+                    content_type='application/json; charset=utf-8',
+                    headers={'Content-Encoding': 'gzip'})
 
 # 所有非 /api 路由，走前端页面分发
 @app.route('/', defaults={'path': ''})

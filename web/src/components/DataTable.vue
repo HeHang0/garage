@@ -38,6 +38,7 @@
 </template>
 
 <script lang="ts" setup>
+import { columns_data_to_table_data } from '@/utils/tools';
 import { ref, watch, reactive, computed } from 'vue';
 
 interface Column {
@@ -48,7 +49,7 @@ interface Column {
 }
 
 interface Props {
-  tableData: Record<string, any[]>;
+  tableData: Record<string, { data: any[]; columns: string[] }>;
 }
 
 const columns = reactive({} as Record<string, Column[]>);
@@ -61,14 +62,21 @@ const hasPlateColumn = (tabName: string) => {
   return columns[tabName]?.some(col => col.dataKey === '车牌号');
 };
 
+const originalData: Record<string, any[]> = {};
+
 // 过滤数据
 const filteredData = computed(() => {
   const result: Record<string, any[]> = {};
   Object.keys(props.tableData).forEach(tabName => {
     if (!plateSearchValue.value || !hasPlateColumn(tabName)) {
-      result[tabName] = props.tableData[tabName];
+      originalData[tabName] = columns_data_to_table_data(
+        props.tableData[tabName].columns,
+        props.tableData[tabName].data
+      );
+      console.log(props.tableData, originalData[tabName]);
+      result[tabName] = originalData[tabName];
     } else {
-      result[tabName] = props.tableData[tabName].filter(row => {
+      result[tabName] = originalData[tabName].filter(row => {
         const plateValue = row['车牌号'];
         return (
           plateValue &&
@@ -85,8 +93,8 @@ const filteredData = computed(() => {
 function resetColumns() {
   Object.keys(props.tableData).forEach(tabName => {
     const firstRow =
-      (props.tableData[tabName] && props.tableData[tabName][0]) || {};
-    columns[tabName] = Object.keys(firstRow).map((m, i) => ({
+      (props.tableData[tabName] && props.tableData[tabName]?.columns) || [];
+    columns[tabName] = firstRow.map(m => ({
       key: m,
       dataKey: m,
       title: m,
