@@ -144,3 +144,4 @@ node_modules
 *.xls
 .idea
 db_config.py
+frontend

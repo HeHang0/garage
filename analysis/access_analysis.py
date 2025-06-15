@@ -7,6 +7,8 @@ def analyze_user(df_io, df_info, text):
 
 def analyze_single_vehicle(df_io, df_info, cph):
     df_car = df_io[df_io['CPH'] == cph].copy()
+    if df_car.empty:
+        return {}
     df_car.sort_values(by='InTime', inplace=True, ascending=False)
 
     # 出入频率
@@ -47,7 +49,7 @@ def analyze_single_vehicle(df_io, df_info, cph):
         '平均停留（小时）': avg_duration,
         '常用进入位置': json.dumps(in_gates.to_dict(), ensure_ascii=False),
         '常用离开位置': json.dumps(out_gates.to_dict(), ensure_ascii=False),
-        '住户信息': f"{df_info_car["HomeAddress"]}, {df_info_car["UserName"]}" if df_info_car else ""
+        '住户信息': f"{df_info_car['HomeAddress']}, {df_info_car['UserName']}" if df_info_car else ''
     }
 
 def compare_multiple_vehicles(df_io, df_info, cph_list):
@@ -89,17 +91,17 @@ def compare_multiple_vehicles(df_io, df_info, cph_list):
 
 def pretty_compare_output(result: dict):
     # 车辆分析结果汇总表
-    print("📊 每辆车行为分析：")
+    text = "📊 每辆车行为分析：\n"
     summary_text = ""
     for cph, detail in result['车辆分析结果'].items():
         summary_text += f"{cph}:\n"
         for key, value in detail.items():
             summary_text += f"\t{key}: {value or ''}\n"
     # 输出车辆汇总
-    print(summary_text)
+    text += summary_text
 
     # 输出交集对比
-    print("🔍 车辆对比结果：")
+    text += "\n🔍 车辆对比结果：\n"
     overlap_text = ""
     overlap_text += f"全部车辆同时出现天数: {result['全部车辆同时出现天数']}\n"
     overlap_text += f"全部车辆同时出现日期: {result['全部车辆同时出现日期']}\n"
@@ -107,4 +109,5 @@ def pretty_compare_output(result: dict):
         overlap_text += f"{k}:\n"
         overlap_text += f"\t是否同住户: {'是' if detail['是否同住户'] else '是'}\n"
         overlap_text += f"\t{'共同出现天数'}: {detail['共同出现天数']}\n"
-    print(overlap_text)
+    text += overlap_text
+    return text

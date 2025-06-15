@@ -1,9 +1,5 @@
-import time
-
-import pandas as pd
-from openpyxl.utils import get_column_letter
 from openpyxl import load_workbook
-
+from openpyxl.utils import get_column_letter
 
 columns_map = {
     'Year': '年',
@@ -23,7 +19,11 @@ columns_map = {
     'HomeAddress': '地址',
     'Province': '地区',
     'Count': '数量',
-    'CarType': '车辆类型'
+    'CarType': '车辆类型',
+    'InTime': '进入时间',
+    'OutTime': '离开时间',
+    'InGateName': '进入位置',
+    'OutGateName': '离开位置'
 }
 
 def export_to_excel(df, writer, sheet_name="Sheet1"):

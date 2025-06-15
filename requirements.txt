@@ -3,4 +3,5 @@ sqlalchemy
 pyodbc
 openpyxl
 xlrd
-IPython
+flask
+flask-cors

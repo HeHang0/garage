@@ -41,6 +41,8 @@ def compute_monthly_tmp_income(df):
 def compute_monthly_month_income(df, user_df):
     df = df[df['TypeClass'] == '月租车'][['Year', 'Month', 'YearMonth', 'CPH']].drop_duplicates()
     df = df.merge(user_df, on='CPH', how='left')
+    df['UserName'] = df['UserName'].fillna("")
+    df['HomeAddress'] = df['HomeAddress'].fillna("")
     df['Fee'] = df.apply(calc_month_fee, axis=1)
     result = df.groupby(['Year', 'Month', 'YearMonth'])['Fee'].sum().reset_index()
     result['TypeClass'] = '月租车'
@@ -56,6 +58,8 @@ def compute_single_month_income(df, user_df):
     df = df[df['TypeClass'] == '月租车'][['Year', 'Month', 'YearMonth', 'CPH']].drop_duplicates()
     df = df.merge(user_df, on='CPH', how='left')
     df['Fee'] = df.apply(calc_month_fee, axis=1)
+    df['UserName'] = df['UserName'].fillna("")
+    df['HomeAddress'] = df['HomeAddress'].fillna("")
     return df
 
 

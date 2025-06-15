@@ -15,6 +15,8 @@ def classify_card_type(card_type):
 
 def clean_parking_data(df):
     df = df.drop_duplicates()
+    df['InGateName'] = df['InGateName'].fillna("")
+    df['OutGateName'] = df['OutGateName'].fillna("")
     df['StayTime'] = ((df['OutTime'] - df['InTime']).dt.total_seconds() / 60).astype(int)
     df['StayHour'] = ((df['StayTime']) / 60).round(1)
     df['StayDay'] = ((df['StayTime']) / 1440).round(1)
@@ -26,7 +28,7 @@ def clean_parking_data(df):
     df['IsInOut'] = (~df['IsOnlyIn']) & (~df['IsOnlyOut'])
     df['HourIn'] = df['InTime'].dt.hour
     df['HourOut'] = df['OutTime'].dt.hour
-    df['YearMonth'] = df['InTime'].dt.to_period('M')
+    df['YearMonth'] = df['InTime'].dt.to_period('M').astype(str)
     df['Year'] = df['InTime'].dt.year
     df['Month'] = df['InTime'].dt.month
     return df.drop(columns=['InLen', 'OutLen'])
@@ -56,4 +58,6 @@ def clean_user_data(df):
     df = df.groupby(['HomeAddress', 'CPH'])['UserName'].agg(lambda x: ''.join(x)).reset_index()
     df['Order'] = df.groupby('HomeAddress').cumcount() + 1
     df.loc[df['HomeAddress'].str.strip() == '', 'Order'] = 1
+    df['UserName'] = df['UserName'].fillna("")
+    df['HomeAddress'] = df['HomeAddress'].fillna("")
     return df

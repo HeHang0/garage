@@ -30,10 +30,11 @@ def analyze_activity_patterns(df, user_df):
     result = result.merge(user_df[['CPH', 'UserName', 'HomeAddress']], on='CPH', how='left')
     result = result.merge(df_typeclass, on='CPH', how='left')
 
+    result['UserName'] = result['UserName'].fillna("")
+    result['HomeAddress'] = result['HomeAddress'].fillna("")
     result['DayInCount'] = result['DayInCount'].fillna(0)
     result['DayOutCount'] = result['DayOutCount'].fillna(0)
     result['NightInCount'] = result['NightInCount'].fillna(0)
     result['NightOutCount'] = result['NightOutCount'].fillna(0)
-    result['HomeAddress'] = result['HomeAddress'].fillna('')
 
     return result.sort_values(by='VisitCount', ascending=False)

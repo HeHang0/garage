@@ -1,0 +1,16 @@
+[Unit]
+Description=Garage Python Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/garage
+ExecStart=/opt/garage/.venv/bin/python /opt/garage/main.py
+Restart=always
+User=root
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

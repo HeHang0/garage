@@ -75,9 +75,9 @@ def has_three_consecutive_same_or_numbers(cph):
 def analyze_area_plate(df, user_df):
     df = df[df['CPH'].str.len() > 0][['CPH']].drop_duplicates()
     special_df = df.groupby('CPH').size().reset_index(name='VisitCount').merge(user_df, on='CPH', how='left')
+    special_df['UserName'] = special_df['UserName'].fillna("")
+    special_df['HomeAddress'] = special_df['HomeAddress'].fillna("")
     special_df['SpecialCPH'] = special_df['CPH'].apply(has_three_consecutive_same_or_numbers)
-    special_df['UserName'] = special_df['UserName'].fillna('')
-    special_df['HomeAddress'] = special_df['HomeAddress'].fillna('')
     df['Province'] = df['CPH'].str[0].apply(lambda x: area_dict.get(x, "未知"))
     df['CarType'] = df['CPH'].apply(lambda x: '电车' if len(str(x)) == 8 else '油车')
 
@@ -87,14 +87,3 @@ def analyze_area_plate(df, user_df):
     car_type_counts = df.groupby('CarType').size().reset_index(name='VisitCount')
     car_type_counts.columns = ['CarType', 'Count']
     return province_counts, unknow_cph,car_type_counts,special_df[special_df['SpecialCPH'] >= 3].sort_values(by='SpecialCPH', ascending=False).drop(columns=['Order', 'SpecialCPH'])
-
-def analyze_plate(df):
-    car_df = df[df['CPH'] == plate].copy()
-    if car_df.empty:
-        print("无该车牌记录")
-        return
-
-    car_df['InHour'] = car_df['InTime'].dt.hour
-    car_df['OutHour'] = car_df['OutTime'].dt.hour
-    freq = car_df['YearMonth'].value_counts().sort_index()
-    return freq
