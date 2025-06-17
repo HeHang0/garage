@@ -142,6 +142,7 @@ node_modules
 *.pkl
 *.xlsx
 *.xls
+*.csv
 .idea
 db_config.py
 frontend

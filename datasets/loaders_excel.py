@@ -2,10 +2,19 @@ import os
 
 import pandas as pd
 
+# 定义一个通用的时间解析函数
+def parse_time(value):
+    try:
+        return pd.to_datetime(value)
+    except Exception:
+        return pd.NaT  # 非法的时间返回 NaT
 
-def load_run_from_excel(excel_file, sheet_name='Sheet1'):
+def load_run_from_excel(excel_file, sheet_name='Sheet1', n_rows=None):
     # 1. 读取 Excel 文件
-    df = pd.read_excel(excel_file, sheet_name)
+    if excel_file.endswith('.csv'):
+        df = pd.read_csv(excel_file, nrows=n_rows)
+    else:
+        df = pd.read_excel(excel_file, sheet_name, nrows=n_rows)  # type:pd.DataFrame
 
     # 2. 字段映射（假设 Excel 中的列是中文，数据库是英文）
     field_mapping = {
@@ -25,14 +34,21 @@ def load_run_from_excel(excel_file, sheet_name='Sheet1'):
     }
     df = df.rename(columns=field_mapping)
     df = df[['CardType', 'CPH', 'InGateName', 'OutGateName', 'InTime', 'OutTime']]
-    df['InTime'] = pd.to_datetime(df['InTime'])
-    df['OutTime'] = pd.to_datetime(df['OutTime'])
+    df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
+    df['InTime'] = df['InTime'].apply(parse_time)
+    df['OutTime'] = df['OutTime'].apply(parse_time)
+    df['InTime'] = df['InTime'].fillna(df['OutTime'])
+    df['OutTime'] = df['OutTime'].fillna(df['InTime'])
+
     df['CardType'] = df['CardType'].map(type_mapping)
     return df
 
-def load_user_from_excel(excel_file, sheet_name='Sheet1'):
+def load_user_from_excel(excel_file, sheet_name='Sheet1', n_rows=None):
     # 1. 读取 Excel 文件
-    df = pd.read_excel(excel_file, sheet_name)
+    if excel_file.endswith('.csv'):
+        df = pd.read_csv(excel_file, nrows=n_rows)
+    else:
+        df = pd.read_excel(excel_file, sheet_name, nrows=n_rows)
 
     # 2. 字段映射（假设 Excel 中的列是中文，数据库是英文）
     field_mapping = {
@@ -42,6 +58,7 @@ def load_user_from_excel(excel_file, sheet_name='Sheet1'):
     }
     df = df.rename(columns=field_mapping)
     df = df[['UserName', 'HomeAddress', 'CPH']]
+    df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
     df['UserName'] = df['UserName'].fillna('') + '_' + df['HomeAddress'].fillna('')
     return df[['UserName', 'CPH']]
 
@@ -50,12 +67,13 @@ def get_all_excel():
     if not os.path.exists(dir_path):
         return []
     file_path = os.listdir(dir_path)
-    return [os.path.join(dir_path, f) for f in file_path if f.lower().endswith(('.xls', '.xlsx'))]
+    return [os.path.join(dir_path, f) for f in file_path if f.lower().endswith(('.xls', '.xlsx', '.csv'))]
 
 def load_all_run_from_excel(excel_path_list):
     df_list = []
     for excel_path in excel_path_list:
         try:
+            load_run_from_excel(excel_path, sheet_name=0, n_rows=10)
             df = load_run_from_excel(excel_path, sheet_name=0)
             df_list.append(df)
         except:
@@ -66,6 +84,7 @@ def load_all_user_from_excel(excel_path_list):
     df_list = []
     for excel_path in excel_path_list:
         try:
+            load_user_from_excel(excel_path, sheet_name=0, n_rows=0)
             df = load_user_from_excel(excel_path, sheet_name=0)
             df_list.append(df)
         except:
