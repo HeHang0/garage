@@ -8,7 +8,7 @@ from analysis.behavior_analysis import analyze_activity_patterns
 from analysis.income_analysis import compute_single_income, compute_monthly_income
 from analysis.plate_pattern import analyze_area_plate
 from datasets.loaders_db import load_user_info, load_parking_records
-from datasets.loaders_excel import load_all_user_from_excel, get_all_excel, load_all_run_from_excel
+from datasets.loaders_excel import load_all_user_from_excel, get_all_excel, load_all_run_from_excel, load_family_cph
 from features.preprocess import clean_user_data, clean_parking_data
 from reports.export_excel import export_to_excel, columns_map
 
@@ -26,7 +26,8 @@ def get_data():
         excel_df = load_all_run_from_excel(excel_file)
         excel_df.insert(0, df)
         df = pd.concat(excel_df, ignore_index=True)
-        df = clean_parking_data(df)
+        family_cph = load_family_cph()
+        df = clean_parking_data(df, family_cph)
         df.to_pickle(df_path)
 
     if os.path.exists(user_path):
@@ -130,43 +131,58 @@ def compute_income(df, user_df, return_type='json'):
         return output_path
     pkl_path = os.path.join(_data_dir, f"{now}.income.pkl")
     pkl_m_path = os.path.join(_data_dir, f"{now}.income.month.pkl")
+    pkl_f_path = os.path.join(_data_dir, f"{now}.income.family.pkl")
     pkl_t_path = os.path.join(_data_dir, f"{now}.income.tmp.pkl")
-    if os.path.exists(pkl_path) and os.path.exists(pkl_m_path) and os.path.exists(pkl_t_path):
+    if os.path.exists(pkl_path) and os.path.exists(pkl_m_path) and os.path.exists(pkl_f_path) and os.path.exists(pkl_t_path):
         income_df = pickle.load(open(pkl_path, "rb"))
         income_month_df = pickle.load(open(pkl_m_path, "rb"))
+        income_family_df = pickle.load(open(pkl_f_path, "rb"))
         income_tmp_df = pickle.load(open(pkl_t_path, "rb"))
     else:
         income_df = compute_monthly_income(df, user_df)
-        income_month_df, income_tmp_df = compute_single_income(df, user_df)
+        income_month_df, income_family_df, income_tmp_df = compute_single_income(df, user_df)
         income_df.to_pickle(pkl_path)
         income_month_df.to_pickle(pkl_m_path)
+        income_family_df.to_pickle(pkl_m_path)
         income_tmp_df.to_pickle(pkl_t_path)
     if return_type == 'json':
-        detail_df = pd.concat([income_month_df, income_tmp_df], axis=0).groupby(['CPH'])['Fee'].sum().reset_index().merge(user_df[['CPH', 'UserName', 'HomeAddress']], on='CPH', how='left')
+        detail_df = pd.concat([income_month_df, income_family_df, income_tmp_df], axis=0).groupby(['CPH'])['Fee'].sum().reset_index().merge(user_df[['CPH', 'UserName', 'HomeAddress']], on='CPH', how='left')
         detail_df['UserName'] = detail_df['UserName'].fillna("")
         detail_df['HomeAddress'] = detail_df['HomeAddress'].fillna("")
         return {
-            '月租车月度收入': df_to_dict(income_df[income_df['TypeClass'] == '月租车'][['YearMonth', 'Fee']]),
-            '临时车月度收入': df_to_dict(income_df[income_df['TypeClass'] == '临时车'][['YearMonth', 'Fee']]),
-            '月租车年度收入': df_to_dict(income_df[income_df['TypeClass'] == '月租车'].groupby(['Year'])['Fee'].sum().reset_index()),
-            '临时车年度收入': df_to_dict(income_df[income_df['TypeClass'] == '临时车'].groupby(['Year'])['Fee'].sum().reset_index()),
-            '月租车月度收入明细': df_to_dict(income_month_df[['YearMonth', 'CPH', 'Fee']]),
-            '临时车月度收入明细': df_to_dict(income_tmp_df[['YearMonth', 'CPH', 'Fee']]),
-            '月租车年度收入明细': df_to_dict(income_month_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index()),
-            '临时车年度收入明细': df_to_dict(income_tmp_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index()),
+            '月度收入': df_to_dict(income_df[['YearMonth', 'Fee']].groupby(['YearMonth'])['Fee'].sum().reset_index().sort_values(by='YearMonth', ascending=False)),
+            '年度收入': df_to_dict(income_df.groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
+            '月租车月度收入': df_to_dict(income_df[income_df['TypeClass'] == '月租车'][['YearMonth', 'Fee']].sort_values(by='YearMonth', ascending=False)),
+            '亲情车月度收入': df_to_dict(income_df[income_df['TypeClass'] == '亲情车'][['YearMonth', 'Fee']].sort_values(by='YearMonth', ascending=False)),
+            '临时车月度收入': df_to_dict(income_df[income_df['TypeClass'] == '临时车'][['YearMonth', 'Fee']].sort_values(by='YearMonth', ascending=False)),
+            '月租车年度收入': df_to_dict(income_df[income_df['TypeClass'] == '月租车'].groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
+            '亲情车年度收入': df_to_dict(income_df[income_df['TypeClass'] == '亲情车'].groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
+            '临时车年度收入': df_to_dict(income_df[income_df['TypeClass'] == '临时车'].groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
+            '月租车月度收入明细': df_to_dict(income_month_df[['YearMonth', 'CPH', 'Fee']].sort_values(by='YearMonth', ascending=False)),
+            '亲情车月度收入明细': df_to_dict(income_family_df[['YearMonth', 'CPH', 'Fee']].sort_values(by='YearMonth', ascending=False)),
+            '临时车月度收入明细': df_to_dict(income_tmp_df[['YearMonth', 'CPH', 'Fee']].sort_values(by='YearMonth', ascending=False)),
+            '月租车年度收入明细': df_to_dict(income_month_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
+            '亲情车年度收入明细': df_to_dict(income_family_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
+            '临时车年度收入明细': df_to_dict(income_tmp_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False)),
             '收入明细': df_to_dict(detail_df.sort_values(by='Fee', ascending=False))
         }
     with pd.ExcelWriter(output_path) as writer:
-        export_to_excel(income_df[income_df['TypeClass'] == '月租车'][['YearMonth', 'Fee']], writer, sheet_name="月租车月度收入")
-        export_to_excel(income_df[income_df['TypeClass'] == '临时车'][['YearMonth', 'Fee']], writer, sheet_name="临时车月度收入")
-        export_to_excel(income_df[income_df['TypeClass'] == '月租车'].groupby(['Year'])['Fee'].sum().reset_index(), writer, sheet_name="月租车年度收入")
-        export_to_excel(income_df[income_df['TypeClass'] == '临时车'].groupby(['Year'])['Fee'].sum().reset_index(), writer, sheet_name="临时车年度收入")
+        export_to_excel(income_df[['YearMonth', 'Fee']].groupby(['YearMonth'])['Fee'].sum().reset_index().sort_values(by='YearMonth', ascending=False), writer, sheet_name="月度收入")
+        export_to_excel(income_df.groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="年度收入")
+        export_to_excel(income_df[income_df['TypeClass'] == '月租车'][['YearMonth', 'Fee']].sort_values(by='YearMonth', ascending=False), writer, sheet_name="月租车月度收入")
+        export_to_excel(income_df[income_df['TypeClass'] == '亲情车'][['YearMonth', 'Fee']].sort_values(by='YearMonth', ascending=False), writer, sheet_name="亲情车月度收入")
+        export_to_excel(income_df[income_df['TypeClass'] == '临时车'][['YearMonth', 'Fee']].sort_values(by='YearMonth', ascending=False), writer, sheet_name="临时车月度收入")
+        export_to_excel(income_df[income_df['TypeClass'] == '月租车'].groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="月租车年度收入")
+        export_to_excel(income_df[income_df['TypeClass'] == '亲情车'].groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="亲情车年度收入")
+        export_to_excel(income_df[income_df['TypeClass'] == '临时车'].groupby(['Year'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="临时车年度收入")
 
         export_to_excel(income_month_df[['YearMonth', 'CPH', 'Fee']], writer, sheet_name="月租车月度收入明细")
+        export_to_excel(income_family_df[['YearMonth', 'CPH', 'Fee']], writer, sheet_name="亲情车月度收入明细")
         export_to_excel(income_tmp_df[['YearMonth', 'CPH', 'Fee']], writer, sheet_name="临时车月度收入明细")
-        export_to_excel(income_month_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index(), writer, sheet_name="月租车年度收入明细")
-        export_to_excel(income_tmp_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index(), writer, sheet_name="临时车年度收入明细")
-        export_to_excel(pd.concat([income_month_df, income_tmp_df], axis=0)
+        export_to_excel(income_month_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="月租车年度收入明细")
+        export_to_excel(income_family_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="亲情车年度收入明细")
+        export_to_excel(income_tmp_df.groupby(['Year', 'CPH'])['Fee'].sum().reset_index().sort_values(by='Year', ascending=False), writer, sheet_name="临时车年度收入明细")
+        export_to_excel(pd.concat([income_month_df, income_family_df, income_tmp_df], axis=0)
                         .groupby(['CPH'])['Fee'].sum().reset_index()
                         .merge(user_df[['CPH', 'UserName', 'HomeAddress']], on='CPH', how='left')
                         .sort_values(by='Fee', ascending=False),

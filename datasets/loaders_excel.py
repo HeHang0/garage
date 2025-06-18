@@ -15,7 +15,7 @@ def load_run_from_excel(excel_file, sheet_name='Sheet1', n_rows=None):
         df = pd.read_csv(excel_file, nrows=n_rows)
     else:
         df = pd.read_excel(excel_file, sheet_name, nrows=n_rows)  # type:pd.DataFrame
-
+    df.columns = df.columns.str.strip()
     # 2. 字段映射（假设 Excel 中的列是中文，数据库是英文）
     field_mapping = {
         '计费类型': 'CardType',
@@ -49,7 +49,7 @@ def load_user_from_excel(excel_file, sheet_name='Sheet1', n_rows=None):
         df = pd.read_csv(excel_file, nrows=n_rows)
     else:
         df = pd.read_excel(excel_file, sheet_name, nrows=n_rows)
-
+    df.columns = df.columns.str.strip()
     # 2. 字段映射（假设 Excel 中的列是中文，数据库是英文）
     field_mapping = {
         '姓名': 'UserName',
@@ -92,7 +92,7 @@ def load_all_user_from_excel(excel_path_list):
     return df_list
 
 def load_from_excel():
-    dir_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/")
+    dir_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/bak")
     file_path = os.listdir(dir_path)
     run_df_list = []
     user_df_list = []
@@ -110,3 +110,21 @@ def load_from_excel():
         except:
             pass
     return run_df_list,user_df_list
+
+def load_family_cph():
+    file_path = get_all_excel()
+    file_path = [x for x in file_path if os.path.basename(x).startswith("亲情车")]
+    cph_set = set()
+    for excel_file in file_path:
+        if not excel_file.endswith('.xlsx') and not excel_file.endswith('.xls'):
+            continue
+        try:
+            if excel_file.endswith('.csv'):
+                df = pd.read_csv(excel_file)
+            else:
+                df = pd.read_excel(excel_file, 0)
+            df.columns = df.columns.str.strip()
+            cph_set.update(df['车牌号码'].dropna())
+        except:
+            pass
+    return cph_set

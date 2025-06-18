@@ -3,24 +3,29 @@ import re
 import pandas as pd
 
 
-def classify_card_type(card_type):
+def classify_card_type(row, family_cph):
+    cph = row['CPH']
+    card_type = row['CardType']
+    if cph in family_cph:
+        return '亲情车'
     if pd.isnull(card_type):
         return '免费车'
     if card_type.startswith('Mth') or card_type.startswith('Mtp'):
         return '月租车'
     elif card_type.startswith('Tmp') or card_type.startswith('Person'):
         return '临时车'
-    else:#if card_type.startswith('Fre') or card_type.startswith('Tfr'):
+    else:  # Fre / Tfr 等
         return '免费车'
 
-def clean_parking_data(df):
+def clean_parking_data(df, family_cph):
     df = df.drop_duplicates()
     df['InGateName'] = df['InGateName'].fillna("")
     df['OutGateName'] = df['OutGateName'].fillna("")
     df['StayTime'] = ((df['OutTime'] - df['InTime']).dt.total_seconds() / 60).astype(int)
+    df['StayTime'] = df['StayTime'].fillna(0)
     df['StayHour'] = ((df['StayTime']) / 60).round(1)
     df['StayDay'] = ((df['StayTime']) / 1440).round(1)
-    df['TypeClass'] = df['CardType'].apply(classify_card_type)
+    df['TypeClass'] = df.apply(lambda row: classify_card_type(row, family_cph), axis=1)
     df['InLen'] = df['InGateName'].apply(lambda x: len(x) if x and not x.startswith('无') else 0)
     df['OutLen'] = df['OutGateName'].apply(lambda x: len(x) if x and not x.startswith('无') else 0)
     df['IsOnlyIn'] = (df['InLen'] > 0) & (df['OutLen'] <= 0)
