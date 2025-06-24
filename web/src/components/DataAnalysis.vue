@@ -23,13 +23,13 @@
                   ? '请输入车牌号，多个车牌号用逗号分隔'
                   : '请输入名称/地址'
               "
-              style="width: 300px; margin: 0 20px" />
+              style="width: 300px" />
             <el-button type="primary" @click="handleSearch" :loading="loading"
               >搜索</el-button
             >
           </div>
           <div class="result-container" v-if="searchResult">
-            <pre>{{ searchResult }}</pre>
+            <pre v-html="searchResult"></pre>
           </div>
         </div>
       </el-tab-pane>
@@ -38,24 +38,45 @@
         <div class="tab-content">
           <h2>记录查询</h2>
           <div class="search-container">
+            <el-select
+              v-model="recordSearchType"
+              placeholder="请选择搜索类型"
+              style="width: 120px">
+              <el-option label="车牌号" value="cph" />
+              <el-option label="名称/地址" value="name" />
+            </el-select>
             <el-input
-              v-model="recordSearch.cph"
-              placeholder="请输入车牌号，多个车牌号用逗号分隔"
+              v-model="recordSearchValue"
+              :placeholder="
+                recordSearchType === 'cph'
+                  ? '请输入车牌号，多个车牌号用逗号分隔'
+                  : '请输入名称/地址'
+              "
               style="width: 300px"
               clearable />
-            <el-input
-              v-model="recordSearch.name"
-              placeholder="请输入名称或地址"
-              style="width: 200px; margin-left: 20px"
-              clearable />
+            <el-select
+              v-model="dateType"
+              placeholder="请选择日期类型"
+              style="width: 120px">
+              <el-option label="日期区间" value="range" />
+              <el-option label="日期" value="single" />
+              <el-option label="异常进出" value="abnormal" />
+            </el-select>
             <el-date-picker
+              v-if="dateType === 'range'"
               v-model="recordSearch.dateRange"
               type="daterange"
               range-separator="至"
               start-placeholder="开始日期"
               end-placeholder="结束日期"
               :shortcuts="dateShortcuts"
-              style="width: 400px; margin: 0 20px" />
+              style="width: 300px; flex: none" />
+            <el-date-picker
+              v-if="dateType === 'single'"
+              v-model="recordSearch.singleDate"
+              type="date"
+              placeholder="请选择日期"
+              style="width: 180px" />
             <el-button
               type="primary"
               @click="handleRecordSearch"
@@ -101,7 +122,8 @@
           </div>
           <DataTable
             v-if="tableData.behavior"
-            :table-data="tableData.behavior" />
+            :table-data="tableData.behavior"
+            @toAbnormal="handleToAbnormal" />
         </div>
       </el-tab-pane>
 
@@ -143,10 +165,14 @@ const loading = ref(false);
 const recordData = ref<any[]>([]);
 
 // 记录查询相关
+const recordSearchType = ref('cph');
+const recordSearchValue = ref('');
+const dateType = ref('range');
 const recordSearch = reactive({
   cph: '',
   name: '',
-  dateRange: [dayjs().subtract(1, 'month').toDate(), dayjs().toDate()]
+  dateRange: [dayjs().subtract(1, 'month').toDate(), dayjs().toDate()],
+  singleDate: dayjs().toDate()
 });
 
 // 日期快捷选项
@@ -214,29 +240,69 @@ const tableData = reactive<Record<string, any>>({
   plate: null
 });
 
+const handleToAbnormal = (plate: string) => {
+  recordSearchType.value = 'cph';
+  recordSearchValue.value = plate;
+  dateType.value = 'abnormal';
+  activeTab.value = 'record';
+  handleRecordSearch();
+};
+
+const handleToPlateDate = (e: Event) => {
+  const target = e.target as HTMLAnchorElement;
+  const { cph, date } = target?.dataset as { cph: string; date: string };
+  if (!cph || !date) {
+    return;
+  }
+  recordSearchType.value = 'cph';
+  recordSearchValue.value = cph;
+  dateType.value = 'single';
+  activeTab.value = 'record';
+  recordSearch.singleDate = dayjs(date).toDate();
+  handleRecordSearch();
+};
+(window as any).toPlateDate = handleToPlateDate;
+
 // 记录查询处理
 const handleRecordSearch = async () => {
+  // 搜索内容赋值
+  recordSearch.cph =
+    recordSearchType.value === 'cph' ? recordSearchValue.value : '';
+  recordSearch.name =
+    recordSearchType.value === 'name' ? recordSearchValue.value : '';
+
   if (!recordSearch.cph && !recordSearch.name) {
     ElMessage.warning('请输入车牌号或名称');
     return;
   }
 
-  if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
-    ElMessage.warning('请选择日期范围');
-    return;
+  // 日期类型判断
+  let params: any = {
+    cph: recordSearch.cph || '',
+    name: recordSearch.name || ''
+  };
+
+  if (dateType.value === 'range') {
+    if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
+      ElMessage.warning('请选择日期范围');
+      return;
+    }
+    const [start, end] = recordSearch.dateRange;
+    params.start = dayjs(start).format('YYYY-MM-DD');
+    params.end = dayjs(end).format('YYYY-MM-DD');
+  } else if (dateType.value === 'single') {
+    if (!recordSearch.singleDate) {
+      ElMessage.warning('请选择日期');
+      return;
+    }
+    params.date = dayjs(recordSearch.singleDate).format('YYYY-MM-DD');
+  } else if (dateType.value === 'abnormal') {
+    params.abnormal = true;
   }
 
   loading.value = true;
   try {
-    const [start, end] = recordSearch.dateRange;
-    const response: any = await request.get('/api/record', {
-      params: {
-        cph: recordSearch.cph || '',
-        name: recordSearch.name || '',
-        start: dayjs(start).format('YYYY-MM-DD'),
-        end: dayjs(end).format('YYYY-MM-DD')
-      }
-    });
+    const response: any = await request.get('/api/record', { params });
     recordData.value = columns_data_to_table_data(
       response.columns,
       response.data
@@ -305,6 +371,10 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
   --el-text-color-regular: var(--color-text);
 }
 
+:deep(a) {
+  cursor: pointer;
+}
+
 .tab-content {
   padding: 20px;
   background-color: var(--color-background-soft);
@@ -318,7 +388,10 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
 .search-container {
   margin: 20px 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-start;
+  gap: 20px;
 }
 
 .button-container {

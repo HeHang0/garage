@@ -49,7 +49,9 @@ def get_record():
     cph_list = request.args.get('cph', '').strip().replace("，", ",").split(',')
     start = request.args.get('start', '')
     end = request.args.get('end', '')
-    result = record_data(_df.copy(), _user_df.copy(), cph_list, name, start, end)
+    date = request.args.get('date', '')
+    abnormal = request.args.get('abnormal', '')
+    result = record_data(_df.copy(), _user_df.copy(), cph_list, name, start, end, date, abnormal)
     return api_response(result)
 
 @app.route('/api/area/excel', methods=['GET'])

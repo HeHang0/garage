@@ -52,7 +52,7 @@ def df_to_dict(df):
         "columns": df.columns.tolist()
     }
 
-def record_data(df, user_df, cph_list, name, start, end):
+def record_data(df, user_df, cph_list, name, start, end, date, abnormal):
     if (not cph_list or len(cph_list) == 0) and not name:
         return []
     df = df.merge(user_df, on='CPH', how='left')
@@ -66,6 +66,13 @@ def record_data(df, user_df, cph_list, name, start, end):
         df = df[df['InTime'] >= pd.to_datetime(start)]
     if end:
         df = df[df['OutTime'] <= pd.to_datetime(end)]
+    if date:
+        date = date[:10]
+        df = df[df['InTime'] >= pd.to_datetime(f'{date} 00:00:00')]
+        df = df[df['InTime'] <= pd.to_datetime(f'{date} 23:59:59')]
+    if abnormal:
+        df = df[(df['InTime'] == df['OutTime']) | df['InTime'].isnull()  | df['OutTime'].isnull() | ((df['OutTime'] - df['InTime']) < pd.Timedelta(minutes=1))]
+
     df = df[['CPH', 'TypeClass','InTime','OutTime','InGateName','OutGateName','UserName','HomeAddress']].sort_values(by='InTime', ascending=False)
     df['InTime'] = df['InTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df['OutTime'] = df['OutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')

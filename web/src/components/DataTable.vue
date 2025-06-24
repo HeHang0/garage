@@ -39,7 +39,7 @@
 
 <script lang="ts" setup>
 import { columns_data_to_table_data } from '@/utils/tools';
-import { ref, watch, reactive, computed } from 'vue';
+import { ref, watch, reactive, computed, h } from 'vue';
 
 interface Column {
   key: string | number;
@@ -52,6 +52,7 @@ interface Props {
   tableData: Record<string, { data: any[]; columns: string[] }>;
 }
 
+const emit = defineEmits(['toAbnormal']);
 const columns = reactive({} as Record<string, Column[]>);
 const props = defineProps<Props>();
 const activeTab = ref(Object.keys(props.tableData)[0]);
@@ -98,7 +99,18 @@ function resetColumns() {
       key: m,
       dataKey: m,
       title: m,
-      width: 120
+      width: 120,
+      cellRenderer:
+        tabName === '异常车辆' && m === '信息'
+          ? ({ rowData }: { rowData: any }) =>
+              h(
+                'a',
+                {
+                  onClick: () => emit('toAbnormal', rowData['车牌号'])
+                },
+                rowData['信息']
+              )
+          : void 0
     }));
   });
 }
