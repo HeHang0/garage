@@ -9,9 +9,12 @@ columns_map = {
     'CPH': '车牌号',
     'TypeClass': '类型',
     'VisitCount': '进出次数',
+    'CPHCount': '车辆数',
     'DayInCount': '白天进入次数',
+    'DayCount': '白天出入次数',
     'DayOutCount': '白天离开次数',
     'NightInCount': '夜间进入次数',
+    'NightCount': '夜间出入次数',
     'NightOutCount': '夜间离开次数',
     'MaxStayHour': '最长停放小时',
     'MaxStayDay': '最长停放天数',
@@ -20,10 +23,18 @@ columns_map = {
     'Province': '地区',
     'Count': '数量',
     'CarType': '车辆类型',
+    'StayText': '停车时长',
     'InTime': '进入时间',
     'OutTime': '离开时间',
+    'InCount': '进入次数',
+    'OutCount': '离开次数',
     'InGateName': '进入位置',
-    'OutGateName': '离开位置'
+    'OutGateName': '离开位置',
+    'IsTenant': '是否租户',
+    'CouponCPH': '问券车牌号',
+    'HasCoupon': '是否参加问券',
+    'CouponUserName': '问券姓名',
+    'UserNameConsistency': '姓名一致性'
 }
 
 def export_to_excel(df, writer, sheet_name="Sheet1"):

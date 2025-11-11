@@ -2,14 +2,24 @@ import json
 from itertools import combinations
 from math import isnan
 
+import pandas as pd
 
-def analyze_user(df_io, df_info, text):
+
+def analyze_user(df_io, df_info, text, start, end):
+    if start:
+        df_io = df_io[df_io['InTime'] >= pd.to_datetime(start)]
+    if end:
+        df_io = df_io[df_io['OutTime'] <= pd.to_datetime(end)]
     cph_list = df_info[(df_info['HomeAddress'] == text) | (df_info['UserName'] == text)]['CPH'].dropna().unique().tolist()
     return compare_multiple_vehicles(df_io, df_info, cph_list)
 
-def analyze_single_vehicle(df_io, df_info, cph):
+def analyze_single_vehicle(df_io, df_info, cph, start="", end=""):
     cph = cph.strip() if cph else ''
     df_car = df_io[df_io['CPH'] == cph].copy()
+    if start:
+        df_car = df_car[df_car['InTime'] >= pd.to_datetime(start)]
+    if end:
+        df_car = df_car[df_car['OutTime'] <= pd.to_datetime(end)]
     if df_car.empty:
         return {}
     df_car.sort_values(by='InTime', inplace=True, ascending=False)
@@ -56,8 +66,12 @@ def analyze_single_vehicle(df_io, df_info, cph):
         '住户信息': f"{df_info_car['HomeAddress']}, {df_info_car['UserName']}" if df_info_car else ''
     }
 
-def compare_multiple_vehicles(df_io, df_info, cph_list):
+def compare_multiple_vehicles(df_io, df_info, cph_list, start="", end=""):
     results = {}
+    if start:
+        df_io = df_io[df_io['InTime'] >= pd.to_datetime(start)]
+    if end:
+        df_io = df_io[df_io['OutTime'] <= pd.to_datetime(end)]
     for cph in cph_list:
         results[cph] = analyze_single_vehicle(df_io, df_info, cph)
 

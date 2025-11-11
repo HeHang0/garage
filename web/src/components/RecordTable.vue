@@ -42,7 +42,8 @@ watch(
 
 <style scoped>
 .record-table-container {
-  height: calc(100vh - 180px);
+  /* height: calc(100vh - 180px); */
+  flex: 1;
 }
 
 :deep(.el-table-v2) {

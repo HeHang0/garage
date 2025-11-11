@@ -1,9 +1,12 @@
 <script lang="ts" setup>
+import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import DataAnalysis from './components/DataAnalysis.vue';
 </script>
 
 <template>
-  <DataAnalysis />
+  <el-config-provider :locale="zhCn">
+    <DataAnalysis />
+  </el-config-provider>
 </template>
 
 <style>

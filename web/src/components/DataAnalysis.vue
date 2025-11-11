@@ -5,9 +5,9 @@
       class="demo-tabs"
       tab-position="left"
       style="height: 100vh">
-      <el-tab-pane label="查询" name="query">
+      <el-tab-pane label="分析查询" name="query">
         <div class="tab-content">
-          <h2>查询</h2>
+          <h2>分析查询</h2>
           <div class="search-container">
             <el-select
               v-model="searchType"
@@ -24,6 +24,14 @@
                   : '请输入名称/地址'
               "
               style="width: 300px" />
+            <el-date-picker
+              v-model="recordSearch.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              :shortcuts="dateShortcuts"
+              style="width: 300px; flex: none" />
             <el-button type="primary" @click="handleSearch" :loading="loading"
               >搜索</el-button
             >
@@ -34,9 +42,9 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="记录查询" name="record">
+      <el-tab-pane label="进出记录" name="record">
         <div class="tab-content">
-          <h2>记录查询</h2>
+          <h2>进出记录</h2>
           <div class="search-container">
             <el-select
               v-model="recordSearchType"
@@ -88,10 +96,100 @@
         </div>
       </el-tab-pane>
 
+      <el-tab-pane label="住户列表" name="user">
+        <div class="tab-content">
+          <h2>住户列表</h2>
+          <div class="search-container">
+            <span>排序方式：</span>
+            <el-select
+              v-model="userOrder"
+              placeholder="请选择排序类型"
+              :style="`width: ${userOrder === 'HasCoupon' ? 130 : 100}px`">
+              <el-option label="地址" value="HomeAddress" />
+              <el-option label="是否租户" value="IsTenant" />
+              <el-option label="是否参加问券" value="HasCoupon" />
+              <el-option label="进出次数" value="VisitCount" />
+            </el-select>
+            <el-date-picker
+              v-model="recordSearch.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              :shortcuts="dateShortcuts"
+              style="width: 300px; flex: none" />
+            <el-button
+              type="primary"
+              @click="handleUserSearch"
+              :loading="loading"
+              >搜索</el-button
+            >
+            <el-button type="success" @click="handleDownload('user')"
+              >下载</el-button
+            >
+          </div>
+          <RecordTable v-if="userData" :data="userData" />
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="车辆列表" name="cph">
+        <div class="tab-content">
+          <h2>车辆列表</h2>
+          <div class="search-container">
+            <span>排序方式：</span>
+            <el-select
+              v-model="cphOrder"
+              placeholder="请选择排序类型"
+              style="width: 130px">
+              <el-option label="车辆类型" value="TypeClass" />
+              <el-option :label="wordMap['HomeAddress']" value="HomeAddress" />
+              <el-option label="停留时长" value="StayTime" />
+              <el-option :label="wordMap['VisitCount']" value="VisitCount" />
+              <el-option :label="wordMap['InCount']" value="InCount" />
+              <el-option :label="wordMap['OutCount']" value="OutCount" />
+              <el-option :label="wordMap['DayInCount']" value="DayInCount" />
+              <el-option :label="wordMap['DayOutCount']" value="DayOutCount" />
+              <el-option
+                :label="wordMap['NightInCount']"
+                value="NightInCount" />
+              <el-option
+                :label="wordMap['NightOutCount']"
+                value="NightOutCount" />
+            </el-select>
+            <el-date-picker
+              v-model="recordSearch.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              :shortcuts="dateShortcuts"
+              style="width: 300px; flex: none" />
+            <el-button
+              type="primary"
+              @click="handleCphSearch"
+              :loading="loading"
+              >搜索</el-button
+            >
+            <el-button type="success" @click="handleDownload('cph')"
+              >下载</el-button
+            >
+          </div>
+          <DataTable v-if="cphData" :table-data="cphData" />
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane label="收入汇总" name="income">
         <div class="tab-content">
           <h2>收入汇总</h2>
           <div class="button-container">
+            <el-date-picker
+              v-model="recordSearch.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              :shortcuts="dateShortcuts"
+              style="width: 300px; flex: none" />
             <el-button
               type="primary"
               @click="handleDataFetch('income')"
@@ -110,6 +208,14 @@
         <div class="tab-content">
           <h2>行为分析</h2>
           <div class="button-container">
+            <el-date-picker
+              v-model="recordSearch.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              :shortcuts="dateShortcuts"
+              style="width: 300px; flex: none" />
             <el-button
               type="primary"
               @click="handleDataFetch('behavior')"
@@ -131,6 +237,14 @@
         <div class="tab-content">
           <h2>车牌分析</h2>
           <div class="button-container">
+            <el-date-picker
+              v-model="recordSearch.dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              :shortcuts="dateShortcuts"
+              style="width: 300px; flex: none" />
             <el-button
               type="primary"
               @click="handleDataFetch('plate')"
@@ -150,8 +264,8 @@
 
 <script lang="ts" setup>
 import { reactive, ref } from 'vue';
+import { ElMessage } from 'element-plus/es';
 import request from '../utils/request';
-import { ElMessage } from 'element-plus';
 import DataTable from './DataTable.vue';
 import RecordTable from './RecordTable.vue';
 import dayjs from 'dayjs';
@@ -163,15 +277,19 @@ const searchValue = ref('');
 const searchResult = ref('');
 const loading = ref(false);
 const recordData = ref<any[]>([]);
+const userData = ref<any[]>([]);
+const cphData = ref<any>({});
+const userOrder = ref('HomeAddress');
+const cphOrder = ref('VisitCount');
 
-// 记录查询相关
+// 进出记录相关
 const recordSearchType = ref('cph');
 const recordSearchValue = ref('');
 const dateType = ref('range');
 const recordSearch = reactive({
   cph: '',
   name: '',
-  dateRange: [dayjs().subtract(1, 'month').toDate(), dayjs().toDate()],
+  dateRange: [new Date('2025-01-01'), dayjs().toDate()], //dayjs().subtract(1, 'month').toDate()
   singleDate: dayjs().toDate()
 });
 
@@ -263,7 +381,7 @@ const handleToPlateDate = (e: Event) => {
 };
 (window as any).toPlateDate = handleToPlateDate;
 
-// 记录查询处理
+// 进出记录处理
 const handleRecordSearch = async () => {
   // 搜索内容赋值
   recordSearch.cph =
@@ -314,12 +432,72 @@ const handleRecordSearch = async () => {
   }
 };
 
+const handleUserSearch = async () => {
+  const params: any = {
+    order: userOrder.value
+  };
+  if (dateType.value === 'range') {
+    if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
+      ElMessage.warning('请选择日期范围');
+      return;
+    }
+    const [start, end] = recordSearch.dateRange;
+    params.start = dayjs(start).format('YYYY-MM-DD');
+    params.end = dayjs(end).format('YYYY-MM-DD');
+  }
+  loading.value = true;
+  try {
+    const response: any = await request.get('/api/user', {
+      params
+    });
+    userData.value = columns_data_to_table_data(
+      response.columns,
+      response.data
+    );
+  } catch (error) {
+    console.error('获取住户数据失败:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleCphSearch = async () => {
+  const params: any = {
+    order: cphOrder.value
+  };
+  if (dateType.value === 'range') {
+    if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
+      ElMessage.warning('请选择日期范围');
+      return;
+    }
+    const [start, end] = recordSearch.dateRange;
+    params.start = dayjs(start).format('YYYY-MM-DD');
+    params.end = dayjs(end).format('YYYY-MM-DD');
+  }
+  loading.value = true;
+  try {
+    const response: any = await request.get('/api/cphl', {
+      params
+    });
+    cphData.value = response;
+  } catch (error) {
+    console.error('获取车辆数据失败:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
 // 查询处理
 const handleSearch = async () => {
   if (!searchValue.value) {
     ElMessage.warning('请输入搜索内容');
     return;
   }
+  if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
+    ElMessage.warning('请选择日期范围');
+    return;
+  }
+  const [start, end] = recordSearch.dateRange;
 
   loading.value = true;
   try {
@@ -327,7 +505,9 @@ const handleSearch = async () => {
     const param = searchType.value === 'cph' ? 'cph' : 'name';
     const response = await request.get(url, {
       params: {
-        [param]: searchValue.value
+        [param]: searchValue.value,
+        start: dayjs(start).format('YYYY-MM-DD'),
+        end: dayjs(end).format('YYYY-MM-DD')
       }
     });
     searchResult.value = response as any;
@@ -341,9 +521,19 @@ const handleSearch = async () => {
 // 数据获取处理
 const handleDataFetch = async (type: 'income' | 'behavior' | 'plate') => {
   loading.value = true;
+  if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
+    ElMessage.warning('请选择日期范围');
+    return;
+  }
+  const [start, end] = recordSearch.dateRange;
   try {
     const url = `/api/${type === 'plate' ? 'area' : type}`;
-    const response = await request.get(url);
+    const response = await request.get(url, {
+      params: {
+        start: dayjs(start).format('YYYY-MM-DD'),
+        end: dayjs(end).format('YYYY-MM-DD')
+      }
+    });
     tableData[type] = response;
   } catch (error) {
     console.error('获取数据失败:', error);
@@ -353,12 +543,53 @@ const handleDataFetch = async (type: 'income' | 'behavior' | 'plate') => {
 };
 
 // 下载处理
-const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
+const handleDownload = (
+  type: 'income' | 'behavior' | 'plate' | 'user' | 'cph' | 'cphl'
+) => {
+  if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
+    ElMessage.warning('请选择日期范围');
+    return;
+  }
+  const [start, end] = recordSearch.dateRange;
   window.open(
     `${
       import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin
-    }/api/${type === 'plate' ? 'area' : type}/excel`
+    }/api/${type === 'plate' ? 'area' : type}/excel?start=${start}&end=${end}`
   );
+};
+
+const wordMap = {
+  Year: '年',
+  YearMonth: '年月',
+  Month: '月',
+  Fee: '金额',
+  CPH: '车牌号',
+  TypeClass: '类型',
+  VisitCount: '进出次数',
+  CPHCount: '车辆数',
+  DayInCount: '白天进入次数',
+  DayCount: '白天出入次数',
+  DayOutCount: '白天离开次数',
+  NightInCount: '夜间进入次数',
+  NightCount: '夜间出入次数',
+  NightOutCount: '夜间离开次数',
+  MaxStayHour: '最长停放小时',
+  MaxStayDay: '最长停放天数',
+  UserName: '名称',
+  HomeAddress: '地址',
+  Province: '地区',
+  Count: '数量',
+  CarType: '车辆类型',
+  StayText: '停车时长',
+  InTime: '进入时间',
+  OutTime: '离开时间',
+  InCount: '进入次数',
+  OutCount: '离开次数',
+  InGateName: '进入位置',
+  OutGateName: '离开位置',
+  IsTenant: '是否租户',
+  CouponCPH: '问券车牌号',
+  HasCoupon: '是否参加问券'
 };
 </script>
 
@@ -379,10 +610,12 @@ const handleDownload = (type: 'income' | 'behavior' | 'plate') => {
   padding: 20px;
   background-color: var(--color-background-soft);
   border-radius: 4px;
-  min-height: calc(100vh - 40px);
+  height: calc(100vh - 40px);
   margin: 20px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   width: calc(100% - 40px);
+  display: flex;
+  flex-direction: column;
 }
 
 .search-container {

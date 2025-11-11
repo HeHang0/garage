@@ -1,6 +1,8 @@
+import hashlib
 import os
 import pickle
 from datetime import datetime
+import time
 
 import pandas as pd
 
@@ -8,8 +10,9 @@ from analysis.behavior_analysis import analyze_activity_patterns
 from analysis.income_analysis import compute_single_income, compute_monthly_income
 from analysis.plate_pattern import analyze_area_plate
 from datasets.loaders_db import load_user_info, load_parking_records
-from datasets.loaders_excel import load_all_user_from_excel, get_all_excel, load_all_run_from_excel, load_family_cph
-from features.preprocess import clean_user_data, clean_parking_data
+from datasets.loaders_excel import load_all_user_from_excel, get_all_excel, load_all_run_from_excel, load_family_cph, \
+    load_address_from_excels, load_coupon_from_excels, card_type_mapping
+from features.preprocess import clean_user_data, clean_parking_data, format_minutes_chinese
 from reports.export_excel import export_to_excel, columns_map
 
 _cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +21,8 @@ _data_dir = os.path.join(_cur_dir, '../data')
 def get_data():
     df_path = os.path.join(_data_dir, "df.pkl")
     user_path = os.path.join(_data_dir, "user.pkl")
+    address_path = os.path.join(_data_dir, "address.pkl")
+    coupon_path = os.path.join(_data_dir, "coupon.pkl")
     excel_file = get_all_excel()
     if os.path.exists(df_path):
         df = pickle.load(open(df_path, "rb"))
@@ -38,8 +43,25 @@ def get_data():
         excel_user_df.insert(0, user_df)
         user_df = pd.concat(excel_user_df, ignore_index=True)
         user_df = clean_user_data(user_df)
+        user_df['CPH'] = user_df['CPH'].str.upper().replace('(空)', '', regex=False)
         user_df.to_pickle(user_path)
-    return df, user_df
+
+    if os.path.exists(address_path):
+        address_df = pickle.load(open(address_path, "rb"))
+    else:
+        address_df = load_address_from_excels(excel_file)
+        address_df.to_pickle(address_path)
+    address_df['HomeAddress'] = address_df['HomeAddress'].apply(normalize_address)
+    user_df['HomeAddress'] = user_df['HomeAddress'].apply(normalize_address)
+    user_df = user_df.drop(columns=['UserName'])
+    user_df = user_df.merge(address_df[['UserName','HomeAddress']], on='HomeAddress', how='left')
+    user_df['UserName'] = user_df['UserName'].fillna("")
+    if os.path.exists(coupon_path):
+        coupon_df = pickle.load(open(coupon_path, "rb"))
+    else:
+        coupon_df = load_coupon_from_excels(excel_file)
+        coupon_df.to_pickle(coupon_path)
+    return df, user_df, address_df, coupon_df
 
 def df_to_dict(df):
     # # 获取 columns_map 中与 df.columns 的交集键
@@ -58,31 +80,37 @@ def record_data(df, user_df, cph_list, name, start, end, date, abnormal):
     df = df.merge(user_df, on='CPH', how='left')
     df['UserName'] = df['UserName'].fillna("")
     df['HomeAddress'] = df['HomeAddress'].fillna("")
-    if cph_list:
-        df = df[df['CPH'].isin(cph_list)]
-    if name:
-        df = df[(df['HomeAddress'] == name) | (df['UserName'] == name)]
     if start:
         df = df[df['InTime'] >= pd.to_datetime(start)]
     if end:
         df = df[df['OutTime'] <= pd.to_datetime(end)]
+    if cph_list:
+        df = df[df['CPH'].isin(cph_list)]
+    if name:
+        df = df[(df['HomeAddress'] == name) | (df['UserName'] == name)]
     if date:
         date = date[:10]
         df = df[df['InTime'] >= pd.to_datetime(f'{date} 00:00:00')]
         df = df[df['InTime'] <= pd.to_datetime(f'{date} 23:59:59')]
     if abnormal:
         df = df[(df['InTime'] == df['OutTime']) | df['InTime'].isnull()  | df['OutTime'].isnull() | ((df['OutTime'] - df['InTime']) < pd.Timedelta(minutes=1))]
-
-    df = df[['CPH', 'TypeClass','InTime','OutTime','InGateName','OutGateName','UserName','HomeAddress']].sort_values(by='InTime', ascending=False)
+    df = df[['CPH', 'TypeClass','InTime','OutTime', 'StayText','InGateName','OutGateName','UserName','HomeAddress']].sort_values(by='InTime', ascending=False)
     df['InTime'] = df['InTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df['OutTime'] = df['OutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     return df_to_dict(df.head(3000))
 
-def area_data(df, _user_df, return_type='json'):
-    now = datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(_data_dir, f"{now}.area.xlsx")
+def get_timestamp_text(start,end):
+    return md5_string(str(start)+str(end)) if start or end else datetime.now().strftime('%Y%m%d')
+
+def area_data(df, _user_df, start, end, return_type='json'):
+    timestamp = get_timestamp_text(start, end)
+    output_path = os.path.join(_data_dir, f"cache.{timestamp}.area.xlsx")
     if return_type == 'excel' and os.path.exists(output_path):
         return output_path
+    if start:
+        df = df[df['InTime'] >= pd.to_datetime(start)]
+    if end:
+        df = df[df['OutTime'] <= pd.to_datetime(end)]
     province_counts, unknow_cph,car_type_counts,special_df = analyze_area_plate(df, _user_df)
     if return_type == 'json':
         return {
@@ -98,12 +126,233 @@ def area_data(df, _user_df, return_type='json'):
         export_to_excel(special_df, writer, sheet_name="特殊车牌")
     return output_path
 
-def behavior_data(df, user_df, return_type='json'):
-    now = datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(_data_dir, f"{now}.behavior.xlsx")
+def normalize_address(addr: str) -> str:
+    addr = str(addr).strip()
+    parts = addr.split('-')
+    # 如果缺少单元号（例如 10-101），就补上
+    if len(parts) == 2:
+        # 用后两位或后三位推测房号长度
+        bld, room = parts
+        # 默认单元号为1
+        return f"{bld}-1-{room}"
+    elif addr == '':
+        return "0-0-0"
+    else:
+        return addr
+
+def user_data(df, user_df, address_df, coupon_df, order, start, end, return_type='json'):
+    timestamp = get_timestamp_text(start, end)
+    output_path = os.path.join(_data_dir, f"cache.{timestamp}.user.xlsx")
     if return_type == 'excel' and os.path.exists(output_path):
         return output_path
-    pkl_path = os.path.join(_data_dir, f"{now}.behavior.pkl")
+    # ========== Step 1. 聚合 CPH ==========
+    # 用户车辆表：按住址聚合车牌
+    user_cph = user_df.groupby('HomeAddress', as_index=False).agg(
+        CPH=('CPH', lambda x: ','.join(sorted({v for v in x if v}))),   # 去空并去重后排序再拼接
+        CPHCount=('CPH', lambda x: len({v for v in x if v}))
+    )
+
+    # 问卷表：按住址聚合问卷车牌
+    coupon_cph = coupon_df.groupby('HomeAddress', as_index=False)['CPH'].agg(lambda x: ','.join(sorted(set(x))))
+
+    # ========== Step 2. 合并住户信息 ==========
+    # 从 address_df 出发（它是 HomeAddress 唯一的主表）
+    merged = address_df.copy()
+    if merged[(merged['HomeAddress'] == '') | (merged['HomeAddress'] == '0-0-0')].empty:
+        # 构造一行空记录
+        empty_row = pd.DataFrame([{
+            'UserName': '临时车',
+            'HomeAddress': '0-0-0',
+            'CPH': '',
+            'IsTenant': False,
+            'CouponCPH': '',
+            'HasCoupon': False
+        }])
+        # 追加到 merged
+        merged = pd.concat([merged, empty_row], ignore_index=True)
+
+    # 合并 user_df 的用户名（后面用来补缺）
+    user_name_map = user_df[['HomeAddress', 'UserName']].drop_duplicates('HomeAddress')
+    coupon_name_map = coupon_df[['HomeAddress', 'UserName']].drop_duplicates('HomeAddress')
+
+    # 按优先级补全：address_df → user_df → coupon_df
+    merged = merged.merge(user_name_map, on='HomeAddress', how='left', suffixes=('', '_user'))
+    merged = merged.merge(coupon_name_map, on='HomeAddress', how='left', suffixes=('', '_coupon'))
+
+    merged['UserName'] = merged['UserName'].fillna(merged['UserName_user'])
+    merged = merged.rename(columns={
+        'UserName_coupon': 'CouponUserName'
+    })
+    # 清理多余列
+    merged = merged[['UserName', 'HomeAddress', 'IsTenant', 'CouponUserName']]
+
+    # ========== Step 3. 合并 CPH 信息 ==========
+    merged = merged.merge(user_cph, on='HomeAddress', how='left')  # 用户车牌
+    merged = merged.merge(coupon_cph.rename(columns={'CPH': 'CouponCPH'}), on='HomeAddress', how='left')
+
+    # ========== Step 4. 生成 HasCoupon ==========
+    merged['HasCoupon'] = merged['CouponCPH'].notna() & (merged['CouponCPH'] != '')
+    # ========== Step 5. 排列列顺序 ==========
+    merged = merged[['UserName', 'HomeAddress', 'CPH', 'CPHCount', 'IsTenant', 'CouponCPH', 'CouponUserName', 'HasCoupon']]
+    # ========== Step 6. 可选：填充空值 ==========
+    merged = merged.fillna({'UserName': '', 'CouponUserName': '', 'CPH': '', 'CouponCPH': '', 'IsTenant': False})
+    merged['UserNameConsistency'] = merged['UserName'] == merged['CouponUserName']
+    merged['UserNameConsistency'] = merged['UserNameConsistency'].map({True: '是', False: '否'})
+    merged['HasCoupon'] = merged['HasCoupon'].map({True: '是', False: '否'})
+    merged['IsTenant'] = merged['IsTenant'].map({True: '是', False: '否'})
+    merged['HomeAddress'] = merged['HomeAddress'].apply(normalize_address)
+    summary_df = get_summary(df, user_df, start, end)
+    merged = merged.merge(summary_df, on='HomeAddress', how='left')
+    merged['VisitCount'] = merged['VisitCount'].fillna(0)
+    merged['CPHCount'] = merged['CPHCount'].fillna(0)
+    order_by = [order]
+    ascending = False
+    if order == 'HomeAddress':
+        merged[['building', 'unit', 'room']] = merged['HomeAddress'].str.split('-', expand=True).astype(int)
+        order_by = ['building', 'unit', 'room']
+        ascending = True
+    merged = merged.sort_values(by=order_by, ascending=ascending).reset_index(drop=True)
+    if order == 'HomeAddress':
+        merged = merged.drop(columns=['building', 'unit', 'room'])
+
+    if return_type == 'json':
+        return df_to_dict(merged)
+    else:
+        with pd.ExcelWriter(output_path) as writer:
+            export_to_excel(merged, writer, sheet_name="住户信息")
+        return output_path
+
+
+def get_summary(df, user_df, start, end):
+    if start:
+        df = df[df['InTime'] >= pd.to_datetime(start)]
+    if end:
+        df = df[df['OutTime'] <= pd.to_datetime(end)]
+    # --- Step 5. 匹配 HomeAddress ---
+    summary = df.merge(
+        user_df[['CPH', 'HomeAddress']], on='CPH', how='left'
+    )
+    summary['HomeAddress'] = summary['HomeAddress'].fillna('0-0-0')
+    summary = summary.groupby('HomeAddress').agg(
+        VisitCount=('HomeAddress', 'count'),
+    ).reset_index()
+    summary['HomeAddress'] = summary['HomeAddress'].apply(normalize_address)
+    # --- Step 7. 排列列顺序 ---
+    return summary[['VisitCount', 'HomeAddress']]
+
+def first_of_list(lst, default_value=None):
+    """
+    返回列表的第一个有效值；
+    如果列表为空、为None，或第一个元素为空(None或空字符串)，则返回默认值。
+    """
+
+    # if not lst:  # None 或 空列表
+    #     return default_value
+    for first in lst:
+        if first not in (None, ''):
+            return first
+    return default_value
+
+def md5_string(s: str) -> str:
+    """
+    返回字符串 s 的 MD5 值（32 位小写十六进制）
+    """
+    # 注意需要先编码成字节
+    return hashlib.md5(s.encode('utf-8')).hexdigest()
+
+def calc_true_len(lst):
+    result = 0
+    for v in lst:
+        if v:
+            result += 1
+    return result
+
+def cph_data(df, user_df, order, start, end, return_type='json'):
+    timestamp = get_timestamp_text(start, end)
+    df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.pkl")
+    output_path = os.path.join(_data_dir, f"{timestamp}.cph.xlsx")
+    if return_type == 'excel' and os.path.exists(output_path):
+        return output_path
+    if start:
+        df = df[df['InTime'] >= pd.to_datetime(start)]
+    if end:
+        df = df[df['OutTime'] <= pd.to_datetime(end)]
+
+    if return_type == 'json' and os.path.exists(df_path):
+        df = pickle.load(open(df_path, "rb"))
+    else:
+        df = df[['TypeClass', 'CPH', 'YearMonth', 'StayTime', 'IsOnlyIn', 'IsOnlyOut', 'IsDayIn', 'IsDayOut', 'IsInOut']]
+        df = df.groupby(['CPH', 'YearMonth'], as_index=False).agg(
+            TypeClass=('TypeClass', first_of_list),
+            StayTime=('StayTime', lambda x: sum(x)),
+            VisitCount=('CPH', lambda x: len(x)),
+            InOutCount=('IsInOut', calc_true_len),
+            InCount=('IsOnlyIn', calc_true_len),
+            OutCount=('IsOnlyOut', calc_true_len),
+            DayInCount=('IsDayIn', calc_true_len),
+            DayOutCount=('IsDayOut', calc_true_len)
+        )
+        df['InCount'] = df['InCount'] + df['InOutCount']
+        df['OutCount'] = df['OutCount'] + df['InOutCount']
+        df['NightInCount'] = df['InCount'] - df['DayInCount']
+        df['NightOutCount'] = df['OutCount'] - df['DayOutCount']
+        address_df = user_df[['CPH', 'HomeAddress']].sort_values(by=['HomeAddress'], ascending=False).reset_index(drop=True)
+        address_df = address_df.groupby('CPH', as_index=False).agg(
+            HomeAddress=('HomeAddress', first_of_list)
+        )
+        user_df = user_df[['HomeAddress', 'UserName']].sort_values(by=['UserName'], ascending=False).reset_index(drop=True)
+        user_df = user_df.groupby('HomeAddress', as_index=False).agg(
+            UserName=('UserName', first_of_list)
+        )
+        # --- Step 5. 匹配 HomeAddress ---
+        df = df.merge(
+            address_df, on='CPH', how='left'
+        )
+        df = df.merge(
+            user_df, on='HomeAddress', how='left'
+        )
+        df['HomeAddress'] = df['HomeAddress'].fillna('')
+        df['UserName'] = df['UserName'].fillna('')
+        df['TypeClass'] = df['TypeClass'].fillna('')
+        df.loc[df['HomeAddress'] == '0-0-0', 'HomeAddress'] = ''
+        df = df[['CPH', 'YearMonth', 'TypeClass', 'HomeAddress', 'UserName', 'StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']]
+        df.to_pickle(df_path)
+    year_month = df[['YearMonth']].drop_duplicates('YearMonth').sort_values(by='YearMonth', ascending=True).values.tolist()
+    year_month.insert(0, ['汇总'])
+    df_name_arr = []
+    for item_arr in year_month:
+        item = item_arr[0]
+        if item != '汇总':
+            df_item = df[df['YearMonth'] == item].copy()
+            df_item = df_item.drop(columns=['YearMonth'])
+        else:
+            df_item = df.groupby(['CPH', 'TypeClass', 'HomeAddress', 'UserName'], as_index=False)[['StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']].sum()
+        df_item['StayText'] = df_item['StayTime'].apply(format_minutes_chinese)
+        if order:
+            df_item = df_item.sort_values(by=[order], ascending=False).reset_index(drop=True)
+        df_item = df_item.drop(columns=['StayTime'])
+        df_name_arr.append({
+            "name": item,
+            "df": df_item
+        })
+    if return_type == 'json':
+        result = {}
+        for item in df_name_arr:
+            result[item['name']] = df_to_dict(item['df'])
+        return result
+    else:
+        with pd.ExcelWriter(output_path) as writer:
+            for item in df_name_arr:
+                export_to_excel(item['df'], writer, sheet_name=item['name'])
+        return output_path
+
+
+def behavior_data(df, user_df, start, end, return_type='json'):
+    timestamp = get_timestamp_text(start, end)
+    output_path = os.path.join(_data_dir, f"cache.{timestamp}.behavior.xlsx")
+    if return_type == 'excel' and os.path.exists(output_path):
+        return output_path
+    pkl_path = os.path.join(_data_dir, f"cache.{timestamp}.behavior.pkl")
     if os.path.exists(pkl_path):
         b_df = pickle.load(open(pkl_path, "rb"))
     else:
@@ -131,15 +380,15 @@ def behavior_data(df, user_df, return_type='json'):
         export_to_excel(exception_df.sort_values(by='Count', ascending=False)[['CPH','Count','信息']], writer, sheet_name="异常车辆")
     return output_path
 
-def compute_income(df, user_df, return_type='json'):
-    now = datetime.now().strftime('%Y%m%d')
-    output_path = os.path.join(_data_dir, f"{now}.income.xlsx")
+def compute_income(df, user_df, start, end, return_type='json'):
+    timestamp = get_timestamp_text(start, end)
+    output_path = os.path.join(_data_dir, f"cache.{timestamp}.income.xlsx")
     if return_type == 'excel' and os.path.exists(output_path):
         return output_path
-    pkl_path = os.path.join(_data_dir, f"{now}.income.pkl")
-    pkl_m_path = os.path.join(_data_dir, f"{now}.income.month.pkl")
-    pkl_f_path = os.path.join(_data_dir, f"{now}.income.family.pkl")
-    pkl_t_path = os.path.join(_data_dir, f"{now}.income.tmp.pkl")
+    pkl_path = os.path.join(_data_dir, f"cache.{timestamp}.income.pkl")
+    pkl_m_path = os.path.join(_data_dir, f"cache.{timestamp}.income.month.pkl")
+    pkl_f_path = os.path.join(_data_dir, f"cache.{timestamp}.income.family.pkl")
+    pkl_t_path = os.path.join(_data_dir, f"cache.{timestamp}.income.tmp.pkl")
     if os.path.exists(pkl_path) and os.path.exists(pkl_m_path) and os.path.exists(pkl_f_path) and os.path.exists(pkl_t_path):
         income_df = pickle.load(open(pkl_path, "rb"))
         income_month_df = pickle.load(open(pkl_m_path, "rb"))
@@ -196,10 +445,10 @@ def compute_income(df, user_df, return_type='json'):
                         writer, sheet_name="收入明细")
     return output_path
 
-def user_data():
-    print("读取数据中...")
-    df = load_user_info()
-    print(f"原始记录数: {len(df)}")
-    print("清洗数据中...")
-    df = clean_user_data(df)
-    print(df.head())
+# def user_data():
+#     print("读取数据中...")
+#     df = load_user_info()
+#     print(f"原始记录数: {len(df)}")
+#     print("清洗数据中...")
+#     df = clean_user_data(df)
+#     print(df.head())

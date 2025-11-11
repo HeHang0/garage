@@ -73,17 +73,17 @@ def has_three_consecutive_same_or_numbers(cph):
     return max_len if max_len >= 4 else 0  # 可选：长度1的不算“连续”
 
 def analyze_area_plate(df, user_df):
-    df = df[df['CPH'].str.len() > 0][['CPH']].drop_duplicates()
+    df = df[df['CPH'].str.len() > 0][['CPH']]
     special_df = df.groupby('CPH').size().reset_index(name='VisitCount').merge(user_df, on='CPH', how='left')
+    df = df.drop_duplicates()
     special_df['UserName'] = special_df['UserName'].fillna("")
     special_df['HomeAddress'] = special_df['HomeAddress'].fillna("")
     special_df['SpecialCPH'] = special_df['CPH'].apply(has_three_consecutive_same_or_numbers)
     df['Province'] = df['CPH'].str[0].apply(lambda x: area_dict.get(x, "未知"))
-    df['CarType'] = df['CPH'].apply(lambda x: '电车' if len(str(x)) == 8 else '油车')
+    df['CarType'] = df['CPH'].apply(lambda x: '新能源' if len(str(x)) == 8 else '油车')
 
     unknow_cph = df[df['Province'] == '未知'][['CPH']].drop_duplicates()
     province_counts = df.groupby('Province').size().reset_index(name='Count')
     province_counts = province_counts.sort_values(by='Count', ascending=False)
-    car_type_counts = df.groupby('CarType').size().reset_index(name='VisitCount')
-    car_type_counts.columns = ['CarType', 'Count']
+    car_type_counts = df.groupby('CarType').size().reset_index(name='Count')
     return province_counts, unknow_cph,car_type_counts,special_df[special_df['SpecialCPH'] >= 3].sort_values(by='SpecialCPH', ascending=False).drop(columns=['Order', 'SpecialCPH'])
