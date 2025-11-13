@@ -170,7 +170,7 @@
               :loading="loading"
               >搜索</el-button
             >
-            <el-button type="success" @click="handleDownload('cph')"
+            <el-button type="success" @click="handleDownload('cphl')"
               >下载</el-button
             >
           </div>
@@ -278,7 +278,7 @@ const searchResult = ref('');
 const loading = ref(false);
 const recordData = ref<any[]>([]);
 const userData = ref<any[]>([]);
-const cphData = ref<any>({});
+const cphData = ref<any>(null);
 const userOrder = ref('HomeAddress');
 const cphOrder = ref('VisitCount');
 
@@ -551,10 +551,14 @@ const handleDownload = (
     return;
   }
   const [start, end] = recordSearch.dateRange;
+  const startText = dayjs(start).format('YYYY-MM-DD');
+  const endText = dayjs(end).format('YYYY-MM-DD');
   window.open(
     `${
       import.meta.env.DEV ? 'http://localhost:8080' : window.location.origin
-    }/api/${type === 'plate' ? 'area' : type}/excel?start=${start}&end=${end}`
+    }/api/${
+      type === 'plate' ? 'area' : type
+    }/excel?start=${startText}&end=${endText}`
   );
 };
 

@@ -161,7 +161,7 @@ def user_data(df, user_df, address_df, coupon_df, order, start, end, return_type
     if merged[(merged['HomeAddress'] == '') | (merged['HomeAddress'] == '0-0-0')].empty:
         # 构造一行空记录
         empty_row = pd.DataFrame([{
-            'UserName': '临时车',
+            'UserName': '未绑定住户车辆',
             'HomeAddress': '0-0-0',
             'CPH': '',
             'IsTenant': False,
@@ -215,6 +215,7 @@ def user_data(df, user_df, address_df, coupon_df, order, start, end, return_type
     if order == 'HomeAddress':
         merged = merged.drop(columns=['building', 'unit', 'room'])
 
+    merged.loc[merged['HomeAddress'] == '0-0-0', 'HomeAddress'] = ''
     if return_type == 'json':
         return df_to_dict(merged)
     else:
