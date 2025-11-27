@@ -99,8 +99,11 @@ def record_data(df, user_df, cph_list, name, start, end, date, abnormal):
     df['OutTime'] = df['OutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     return df_to_dict(df.head(3000))
 
-def get_timestamp_text(start,end):
-    return md5_string(str(start)+str(end)) if start or end else datetime.now().strftime('%Y%m%d')
+def get_timestamp_text(*args):
+    has_valid = any(arg not in (None, '') for arg in args)
+    if not has_valid:
+        return datetime.now().strftime('%Y%m%d')
+    return md5_string(''.join(str(arg) if arg not in (None, '') else '' for arg in args))
 
 def area_data(df, _user_df, start, end, return_type='json'):
     timestamp = get_timestamp_text(start, end)
@@ -141,7 +144,7 @@ def normalize_address(addr: str) -> str:
         return addr
 
 def user_data(df, user_df, address_df, coupon_df, order, start, end, return_type='json'):
-    timestamp = get_timestamp_text(start, end)
+    timestamp = get_timestamp_text(start, end, order)
     output_path = os.path.join(_data_dir, f"cache.{timestamp}.user.xlsx")
     if return_type == 'excel' and os.path.exists(output_path):
         return output_path
@@ -268,8 +271,8 @@ def calc_true_len(lst):
             result += 1
     return result
 
-def cph_data(df, user_df, order, start, end, return_type='json'):
-    timestamp = get_timestamp_text(start, end)
+def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, return_type='json'):
+    timestamp = get_timestamp_text(start, end, order)
     df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.pkl")
     output_path = os.path.join(_data_dir, f"{timestamp}.cph.xlsx")
     if return_type == 'excel' and os.path.exists(output_path):
@@ -278,6 +281,20 @@ def cph_data(df, user_df, order, start, end, return_type='json'):
         df = df[df['InTime'] >= pd.to_datetime(start)]
     if end:
         df = df[df['OutTime'] <= pd.to_datetime(end)]
+
+    idx = df.groupby('CPH')['OutTime'].idxmax()
+    last_df = df.loc[idx]
+    last_df = last_df.rename(columns={'OutTime': 'LastInOutTime'})[['CPH', 'LastInOutTime']]
+    last_df['LastInOutTime'] = last_df['LastInOutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    cph_date_path = os.path.join(_data_dir, f"cph_date.pkl")
+    if os.path.exists(cph_date_path):
+        cph_date_df = pickle.load(open(cph_date_path, "rb"))
+    else:
+        cph_date_df = df[['CPH', 'Date']].drop_duplicates(subset=['CPH', 'Date'])
+        cph_date_df = cph_date_df.groupby(['CPH'], as_index=False).agg(
+            InOutDays=('CPH', lambda x: len(x))
+        )
+        cph_date_df.to_pickle(cph_date_path)
 
     if return_type == 'json' and os.path.exists(df_path):
         df = pickle.load(open(df_path, "rb"))
@@ -327,8 +344,32 @@ def cph_data(df, user_df, order, start, end, return_type='json'):
             df_item = df[df['YearMonth'] == item].copy()
             df_item = df_item.drop(columns=['YearMonth'])
         else:
-            df_item = df.groupby(['CPH', 'TypeClass', 'HomeAddress', 'UserName'], as_index=False)[['StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']].sum()
+            df_item = df.groupby(['CPH', 'TypeClass', 'HomeAddress', 'UserName'], as_index=False)[['StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']].sum().copy()
         df_item['StayText'] = df_item['StayTime'].apply(format_minutes_chinese)
+        df_item = df_item.merge(
+            last_df, on='CPH', how='left'
+        )
+        df_item = df_item.merge(
+            address_df_origin[['HomeAddress', 'IsTenant']], on='HomeAddress', how='left'
+        )
+        df_item = df_item.merge(
+            cph_date_df, on='CPH', how='left'
+        )
+        # mask = (df_item['IsTenant'] == False) & (df_item['HomeAddress'].str.strip() == '')
+        # df_item.loc[mask, 'IsTenant'] = None
+        df_item_mask = (
+                df_item['HomeAddress'].fillna('').str.strip().ne('') &
+                df_item['HomeAddress'].ne('0-0-0') &
+                df_item['IsTenant'].isna()
+        )
+        df_item.loc[df_item_mask, 'IsTenant'] = False
+        df_item['IsTenant'] = df_item['IsTenant'].map({True: '租客', False: '业主'})
+        df_item['IsTenant'] = df_item['IsTenant'].fillna('未绑定')
+        df_item = df_item.rename(columns={
+            'IsTenant': 'ResidentType'
+        })
+        df_item['HasCoupon'] = df_item['HomeAddress'].isin(coupon_df['HomeAddress'])
+        df_item['HasCoupon'] = df_item['HasCoupon'].map({True: '是', False: '否'})
         if order:
             df_item = df_item.sort_values(by=[order], ascending=False).reset_index(drop=True)
         df_item = df_item.drop(columns=['StayTime'])

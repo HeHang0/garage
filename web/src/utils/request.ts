@@ -6,7 +6,7 @@ interface ApiResponse {
 }
 
 const baseURL = import.meta.env.DEV
-  ? 'http://localhost:8080'
+  ? 'http://127.0.0.1:8080'
   : window.location.origin;
 
 const request = axios.create({

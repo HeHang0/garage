@@ -34,7 +34,11 @@ columns_map = {
     'CouponCPH': '问券车牌号',
     'HasCoupon': '是否参加问券',
     'CouponUserName': '问券姓名',
-    'UserNameConsistency': '姓名一致性'
+    'CouponHomeAddress': '问券地址',
+    'UserNameConsistency': '姓名一致性',
+    'LastInOutTime': '最后进出时间',
+    'ResidentType': '住户类型',
+    'InOutDays': '出入天数'
 }
 
 def export_to_excel(df, writer, sheet_name="Sheet1"):

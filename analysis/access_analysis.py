@@ -54,7 +54,7 @@ def analyze_single_vehicle(df_io, df_info, cph, start="", end=""):
     df_info_car = df_info[df_info['CPH'] == cph].drop_duplicates().to_dict(orient='records')
     df_info_car = df_info_car[0] if df_info_car else None
     return {
-        '车牌': cph,
+        '车牌': f'<a onclick="toCPH(\'{cph}\')">{cph}</a>',
         '车类型': df_car['TypeClass'].iloc[0] if not df_car.empty else '',
         '出入天数': freq.shape[0],
         '总出入记录数': len(df_car),

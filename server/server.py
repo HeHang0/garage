@@ -13,7 +13,7 @@ _cur_dir = os.path.dirname(os.path.abspath(__file__))
 _front_dir = os.path.join(_cur_dir, '../frontend')
 
 app = Flask(__name__, static_folder=_front_dir, static_url_path='')
-CORS(app, origins=["http://localhost:5173", "https://hk.picapico.top"])
+CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173", "https://hk.picapico.top"])
 
 _df, _user_df, _address_df, _coupon_df = get_data()
 
@@ -71,7 +71,7 @@ def get_cph_list():
     start = request.args.get('start', '')
     end = request.args.get('end', '')
     order = request.args.get('order', 'VisitCount')
-    result = cph_data(_df.copy(), _user_df.copy(), order, start, end)
+    result = cph_data(_df.copy(), _user_df.copy(), _address_df.copy(), _coupon_df.copy(), order, start, end)
     return api_response(result)
 
 @app.route('/api/cphl/excel', methods=['GET'])
@@ -79,7 +79,7 @@ def get_cph_list_file():
     start = request.args.get('start', '')
     end = request.args.get('end', '')
     order = request.args.get('order', 'VisitCount')
-    output = cph_data(_df.copy(), _user_df.copy(), order, start, end, 'excel')
+    output = cph_data(_df.copy(), _user_df.copy(), _address_df.copy(), _coupon_df.copy(), order, start, end, 'excel')
     return send_file(
         output,
         as_attachment=True,
