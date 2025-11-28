@@ -78,10 +78,6 @@
                 style="width: 120px"
                 clearable
                 @keyup.enter="handlePlateSearch" />
-              <el-checkbox
-                label="仅包含未绑定地址"
-                v-if="hasColumn(tabName, '地址')"
-                v-model="emptyAddressValue" />
               <el-button
                 v-if="hasColumn(tabName, '车牌号')"
                 type="primary"

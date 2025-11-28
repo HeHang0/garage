@@ -77,8 +77,24 @@ def clean_user_data(df):
     df['Order'] = df.groupby('HomeAddress').cumcount() + 1
     df.loc[df['HomeAddress'].str.strip() == '', 'Order'] = 1
     df['UserName'] = df['UserName'].fillna("")
-    df['HomeAddress'] = df['HomeAddress'].fillna("")
+    df['HomeAddress'] = df['HomeAddress'].fillna("").apply(normalize_address)
     return df
+
+
+
+def normalize_address(addr: str) -> str:
+    addr = str(addr).strip()
+    parts = addr.split('-')
+    # 如果缺少单元号（例如 10-101），就补上
+    if len(parts) == 2:
+        # 用后两位或后三位推测房号长度
+        bld, room = parts
+        # 默认单元号为1
+        return f"{bld}-1-{room}"
+    elif addr == '':
+        return "0-0-0"
+    else:
+        return addr
 
 def format_minutes_chinese(minutes):
     minutes = int(minutes)

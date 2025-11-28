@@ -12,7 +12,7 @@ from analysis.plate_pattern import analyze_area_plate
 from datasets.loaders_db import load_user_info, load_parking_records
 from datasets.loaders_excel import load_all_user_from_excel, get_all_excel, load_all_run_from_excel, load_family_cph, \
     load_address_from_excels, load_coupon_from_excels, card_type_mapping
-from features.preprocess import clean_user_data, clean_parking_data, format_minutes_chinese
+from features.preprocess import clean_user_data, clean_parking_data, format_minutes_chinese, normalize_address
 from reports.export_excel import export_to_excel, columns_map
 
 _cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +35,13 @@ def get_data():
         df = clean_parking_data(df, family_cph)
         df.to_pickle(df_path)
 
+    if os.path.exists(address_path):
+        address_df = pickle.load(open(address_path, "rb"))
+    else:
+        address_df = load_address_from_excels(excel_file)
+        address_df['HomeAddress'] = address_df['HomeAddress'].apply(normalize_address)
+        address_df.to_pickle(address_path)
+
     if os.path.exists(user_path):
         user_df = pickle.load(open(user_path, "rb"))
     else:
@@ -44,18 +51,16 @@ def get_data():
         user_df = pd.concat(excel_user_df, ignore_index=True)
         user_df = clean_user_data(user_df)
         user_df['CPH'] = user_df['CPH'].str.upper().replace('(空)', '', regex=False)
+        user_df['HomeAddress'] = user_df['HomeAddress'].apply(normalize_address)
+        user_df = user_df.drop(columns=['UserName'])
+        user_df = user_df.merge(address_df[['UserName','HomeAddress']], on='HomeAddress', how='left')
+        user_df['UserName'] = user_df['UserName'].fillna("")
+        user_df_empty = user_df[user_df['HomeAddress'] == '0-0-0']
+        user_df = user_df[user_df['HomeAddress'] != '0-0-0']
+        user_df_empty['HomeAddress']= ""
+        rows_to_add = user_df_empty[~user_df_empty['CPH'].isin(user_df['CPH'])]
+        user_df = pd.concat([user_df, rows_to_add], ignore_index=True)
         user_df.to_pickle(user_path)
-
-    if os.path.exists(address_path):
-        address_df = pickle.load(open(address_path, "rb"))
-    else:
-        address_df = load_address_from_excels(excel_file)
-        address_df.to_pickle(address_path)
-    address_df['HomeAddress'] = address_df['HomeAddress'].apply(normalize_address)
-    user_df['HomeAddress'] = user_df['HomeAddress'].apply(normalize_address)
-    user_df = user_df.drop(columns=['UserName'])
-    user_df = user_df.merge(address_df[['UserName','HomeAddress']], on='HomeAddress', how='left')
-    user_df['UserName'] = user_df['UserName'].fillna("")
     if os.path.exists(coupon_path):
         coupon_df = pickle.load(open(coupon_path, "rb"))
     else:
@@ -77,27 +82,27 @@ def df_to_dict(df):
 def record_data(df, user_df, cph_list, name, start, end, date, abnormal):
     if (not cph_list or len(cph_list) == 0) and not name:
         return []
-    df = df.merge(user_df, on='CPH', how='left')
-    df['UserName'] = df['UserName'].fillna("")
-    df['HomeAddress'] = df['HomeAddress'].fillna("")
     if start:
         df = df[df['InTime'] >= pd.to_datetime(start)]
     if end:
         df = df[df['OutTime'] <= pd.to_datetime(end)]
     if cph_list:
         df = df[df['CPH'].isin(cph_list)]
-    if name:
-        df = df[(df['HomeAddress'] == name) | (df['UserName'] == name)]
     if date:
         date = date[:10]
         df = df[df['InTime'] >= pd.to_datetime(f'{date} 00:00:00')]
         df = df[df['InTime'] <= pd.to_datetime(f'{date} 23:59:59')]
     if abnormal:
         df = df[(df['InTime'] == df['OutTime']) | df['InTime'].isnull()  | df['OutTime'].isnull() | ((df['OutTime'] - df['InTime']) < pd.Timedelta(minutes=1))]
+    df = df.merge(user_df, on='CPH', how='left')
+    df['UserName'] = df['UserName'].fillna("")
+    df['HomeAddress'] = df['HomeAddress'].fillna("")
+    if name:
+        df = df[(df['HomeAddress'] == name) | (df['UserName'] == name)]
     df = df[['CPH', 'TypeClass','InTime','OutTime', 'StayText','InGateName','OutGateName','UserName','HomeAddress']].sort_values(by='InTime', ascending=False)
     df['InTime'] = df['InTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df['OutTime'] = df['OutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
-    return df_to_dict(df.head(3000))
+    return df_to_dict(df.head(5000))
 
 def get_timestamp_text(*args):
     has_valid = any(arg not in (None, '') for arg in args)
@@ -128,20 +133,6 @@ def area_data(df, _user_df, start, end, return_type='json'):
         export_to_excel(car_type_counts, writer, sheet_name="能源类型")
         export_to_excel(special_df, writer, sheet_name="特殊车牌")
     return output_path
-
-def normalize_address(addr: str) -> str:
-    addr = str(addr).strip()
-    parts = addr.split('-')
-    # 如果缺少单元号（例如 10-101），就补上
-    if len(parts) == 2:
-        # 用后两位或后三位推测房号长度
-        bld, room = parts
-        # 默认单元号为1
-        return f"{bld}-1-{room}"
-    elif addr == '':
-        return "0-0-0"
-    else:
-        return addr
 
 def user_data(df, user_df, address_df, coupon_df, order, start, end, return_type='json'):
     timestamp = get_timestamp_text(start, end, order)
