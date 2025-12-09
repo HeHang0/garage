@@ -190,6 +190,45 @@
         </div>
       </el-tab-pane>
 
+      <el-tab-pane label="区间对比" name="cphCompare">
+        <div class="tab-content">
+          <h2>车辆列表对比</h2>
+          <div class="search-container">
+            <span>首选月份</span>
+            <el-date-picker
+              v-model="recordSearch.mainDateRange"
+              :clearable="false"
+              type="monthrange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              style="width: 300px; flex: none" />
+            <span style="margin-left: 12px">对比月份</span>
+            <el-date-picker
+              v-model="recordSearch.compareDateRange"
+              :clearable="false"
+              type="monthrange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              style="width: 300px; flex: none" />
+            <el-button
+              type="primary"
+              @click="handleCphCompareSearch"
+              :loading="loading"
+              >搜索</el-button
+            >
+            <el-button type="success" @click="handleDownload('cphcompare')"
+              >下载</el-button
+            >
+          </div>
+          <DataTable
+            v-if="cphCompareData"
+            :table-data="cphCompareData"
+            @to-cph="handleToCPHAnalyze" />
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane label="收入汇总" name="income">
         <div class="tab-content">
           <h2>收入汇总</h2>
@@ -302,6 +341,7 @@ const loading = ref(false);
 const recordData = ref<any[]>([]);
 const userData = ref<any[]>([]);
 const cphData = ref<any>(null);
+const cphCompareData = ref<any>(null);
 const userOrder = ref('HomeAddress');
 const cphOrder = ref('VisitCount');
 
@@ -313,7 +353,9 @@ const recordSearch = reactive({
   cph: '',
   name: '',
   dateRange: [new Date('2025-01-01'), new Date('2025-12-31')], //dayjs().subtract(1, 'month').toDate(), dayjs().toDate()
-  singleDate: dayjs().toDate()
+  singleDate: dayjs().toDate(),
+  mainDateRange: [new Date('2025-03-01'), new Date('2025-04-30')],
+  compareDateRange: [new Date('2025-06-01'), new Date('2025-08-31')]
 });
 
 // 表格数据
@@ -470,6 +512,48 @@ const handleCphSearch = async () => {
   }
 };
 
+const handleCphCompareSearch = async () => {
+  const params: any = {};
+  if (!recordSearch.mainDateRange || recordSearch.mainDateRange.length !== 2) {
+    ElMessage.warning('请选择首选月份范围');
+    return;
+  }
+  if (
+    !recordSearch.compareDateRange ||
+    recordSearch.compareDateRange.length !== 2
+  ) {
+    ElMessage.warning('请选择对比月份范围');
+    return;
+  }
+  const [mstart, mend] = recordSearch.mainDateRange;
+  params.mstart = dayjs(mstart).format('YYYY-MM') + '-01';
+  params.mend = dayjs(dayjs(mend).format('YYYY-MM'))
+    .add(1, 'month')
+    .add(-1, 'second')
+    .format('YYYY-MM-DD');
+  const [cstart, cend] = recordSearch.compareDateRange;
+  params.cstart = dayjs(cstart).format('YYYY-MM') + '-01';
+  params.cend = dayjs(dayjs(cend).format('YYYY-MM'))
+    .add(1, 'month')
+    .add(-1, 'second')
+    .format('YYYY-MM-DD');
+  loading.value = true;
+  try {
+    const response: any = await request.get('/api/cphcompare', {
+      params
+    });
+    if (response.data && response.columns) {
+      cphCompareData.value = { 数据对比结果: response };
+    } else {
+      cphCompareData.value = response;
+    }
+  } catch (error) {
+    console.error('获取车辆数据失败:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
 // 查询处理
 const handleSearch = async () => {
   if (!searchValue.value) {
@@ -530,7 +614,7 @@ const handleDataFetch = async (type: 'income' | 'behavior' | 'plate') => {
 
 // 下载处理
 const handleDownload = (
-  type: 'income' | 'behavior' | 'plate' | 'user' | 'cph' | 'cphl'
+  type: 'income' | 'behavior' | 'plate' | 'user' | 'cph' | 'cphl' | 'cphcompare'
 ) => {
   if (!recordSearch.dateRange || recordSearch.dateRange.length !== 2) {
     ElMessage.warning('请选择日期范围');

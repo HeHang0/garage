@@ -265,6 +265,7 @@ def calc_true_len(lst):
 def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, return_type='json'):
     timestamp = get_timestamp_text(start, end, order)
     df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.pkl")
+    last_ym_df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.max.date.pkl")
     output_path = os.path.join(_data_dir, f"{timestamp}.cph.xlsx")
     if return_type == 'excel' and os.path.exists(output_path):
         return output_path
@@ -273,10 +274,20 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
     if end:
         df = df[df['OutTime'] <= pd.to_datetime(end)]
 
-    idx = df.groupby('CPH')['OutTime'].idxmax()
-    last_df = df.loc[idx]
-    last_df = last_df.rename(columns={'OutTime': 'LastInOutTime'})[['CPH', 'LastInOutTime']]
+    if os.path.exists(last_ym_df_path):
+        last_ym_df = pickle.load(open(last_ym_df_path, "rb"))
+    else:
+        last_ym_df = df.groupby(['CPH', 'YearMonth'], as_index=False).agg(
+            LastInOutTime=('OutTime', lambda x: max(x))
+        )
+        last_ym_df.to_pickle(last_ym_df_path)
+
+    idx = last_ym_df.groupby('CPH')['LastInOutTime'].idxmax()
+    last_df = last_ym_df.loc[idx]
+    last_df = last_df[['CPH', 'LastInOutTime']]
     last_df['LastInOutTime'] = last_df['LastInOutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    last_ym_df['LastInOutTime'] = last_ym_df['LastInOutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
     cph_date_path = os.path.join(_data_dir, f"cph_date.pkl")
     if os.path.exists(cph_date_path):
         cph_date_df = pickle.load(open(cph_date_path, "rb"))
@@ -287,7 +298,7 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
         )
         cph_date_df.to_pickle(cph_date_path)
 
-    if return_type == 'json' and os.path.exists(df_path):
+    if os.path.exists(df_path):
         df = pickle.load(open(df_path, "rb"))
     else:
         df = df[['TypeClass', 'CPH', 'YearMonth', 'StayTime', 'IsOnlyIn', 'IsOnlyOut', 'IsDayIn', 'IsDayOut', 'IsInOut']]
@@ -334,12 +345,15 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
         if item != '汇总':
             df_item = df[df['YearMonth'] == item].copy()
             df_item = df_item.drop(columns=['YearMonth'])
+            df_item = df_item.merge(
+                last_ym_df[last_ym_df['YearMonth'] == item][['CPH', 'LastInOutTime']], on='CPH', how='left'
+            )
         else:
             df_item = df.groupby(['CPH', 'TypeClass', 'HomeAddress', 'UserName'], as_index=False)[['StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']].sum().copy()
+            df_item = df_item.merge(
+                last_df, on='CPH', how='left'
+            )
         df_item['StayText'] = df_item['StayTime'].apply(format_minutes_chinese)
-        df_item = df_item.merge(
-            last_df, on='CPH', how='left'
-        )
         df_item = df_item.merge(
             address_df_origin[['HomeAddress', 'IsTenant']], on='HomeAddress', how='left'
         )
@@ -377,6 +391,141 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
         with pd.ExcelWriter(output_path) as writer:
             for item in df_name_arr:
                 export_to_excel(item['df'], writer, sheet_name=item['name'])
+        return output_path
+
+def cph_compare_data(df, user_df, address_df_origin, coupon_df, mstart, mend, cstart, cend, return_type='json'):
+    timestamp = get_timestamp_text(mstart, mend, cstart, cend)
+    df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.pkl")
+    output_path = os.path.join(_data_dir, f"{timestamp}.cph.xlsx")
+    if return_type == 'excel' and os.path.exists(output_path):
+        return output_path
+    if os.path.exists(df_path):
+        df = pickle.load(open(df_path, "rb"))
+    else:
+        main_df = df
+        compare_df = df
+        if mstart:
+            main_df = main_df[main_df['InTime'] >= pd.to_datetime(mstart)]
+        if mend:
+            main_df = main_df[main_df['OutTime'] <= pd.to_datetime(mend)]
+        idx = main_df.groupby('CPH')['OutTime'].idxmax()
+        last_main_df = main_df.loc[idx]
+        last_main_df = last_main_df[['CPH', 'OutTime']]
+        last_main_df['LastInOutTime'] = last_main_df['OutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        last_main_df = last_main_df.drop(columns=['OutTime'])
+        main_date_df = main_df[['CPH', 'Date']].drop_duplicates(subset=['CPH', 'Date'])
+        main_date_df = main_date_df.groupby(['CPH'], as_index=False).agg(
+            InOutDays=('CPH', lambda x: len(x))
+        )
+        if cstart:
+            compare_df = compare_df[compare_df['InTime'] >= pd.to_datetime(cstart)]
+        if cend:
+            compare_df = compare_df[compare_df['OutTime'] <= pd.to_datetime(cend)]
+        idx = compare_df.groupby('CPH')['OutTime'].idxmax()
+        last_compare_df = compare_df.loc[idx]
+        last_compare_df = last_compare_df[['CPH', 'OutTime']]
+        last_compare_df['LastInOutTime'] = last_compare_df['OutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        last_compare_df = last_compare_df.drop(columns=['OutTime'])
+        compare_date_df = compare_df[['CPH', 'Date']].drop_duplicates(subset=['CPH', 'Date'])
+        compare_date_df = compare_date_df.groupby(['CPH'], as_index=False).agg(
+            InOutDays=('CPH', lambda x: len(x))
+        )
+
+        # 找出各自独有的 CPH
+        main_only = main_df[~main_df['CPH'].isin(compare_df['CPH'])]
+        main_only = main_only.groupby(['CPH'], as_index=False).agg(
+            TypeClass=('TypeClass', first_of_list),
+            StayTime=('StayTime', lambda x: sum(x)),
+            VisitCount=('CPH', lambda x: len(x)),
+            InOutCount=('IsInOut', calc_true_len),
+            InCount=('IsOnlyIn', calc_true_len),
+            OutCount=('IsOnlyOut', calc_true_len),
+            DayInCount=('IsDayIn', calc_true_len),
+            DayOutCount=('IsDayOut', calc_true_len)
+        )
+        main_only = main_only.merge(
+            last_main_df, on='CPH', how='left'
+        )
+        main_only = main_only.merge(
+            main_date_df, on='CPH', how='left'
+        )
+        main_only['CompareType'] = '未出现'
+
+        compare_only = compare_df[~compare_df['CPH'].isin(main_df['CPH'])]
+        compare_only = compare_only.groupby(['CPH'], as_index=False).agg(
+            TypeClass=('TypeClass', first_of_list),
+            StayTime=('StayTime', lambda x: sum(x)),
+            VisitCount=('CPH', lambda x: len(x)),
+            InOutCount=('IsInOut', calc_true_len),
+            InCount=('IsOnlyIn', calc_true_len),
+            OutCount=('IsOnlyOut', calc_true_len),
+            DayInCount=('IsDayIn', calc_true_len),
+            DayOutCount=('IsDayOut', calc_true_len)
+        )
+        compare_only = compare_only.merge(
+            last_compare_df, on='CPH', how='left'
+        )
+        compare_only = compare_only.merge(
+            compare_date_df, on='CPH', how='left'
+        )
+        compare_only['CompareType'] = '新出现'
+
+        # 合并成新的结果
+        df = pd.concat([main_only, compare_only], ignore_index=True)
+
+        df['InCount'] = df['InCount'] + df['InOutCount']
+        df['OutCount'] = df['OutCount'] + df['InOutCount']
+        df['NightInCount'] = df['InCount'] - df['DayInCount']
+        df['NightOutCount'] = df['OutCount'] - df['DayOutCount']
+        df = df.drop(columns=['InOutCount'])
+        address_df = user_df[['CPH', 'HomeAddress']].sort_values(by=['HomeAddress'], ascending=False).reset_index(drop=True)
+        address_df = address_df.groupby('CPH', as_index=False).agg(
+            HomeAddress=('HomeAddress', first_of_list)
+        )
+        user_df = user_df[['HomeAddress', 'UserName']].sort_values(by=['UserName'], ascending=False).reset_index(drop=True)
+        user_df = user_df.groupby('HomeAddress', as_index=False).agg(
+            UserName=('UserName', first_of_list)
+        )
+        # --- Step 5. 匹配 HomeAddress ---
+        df = df.merge(
+            address_df, on='CPH', how='left'
+        )
+        df = df.merge(
+            user_df, on='HomeAddress', how='left'
+        )
+        df['HomeAddress'] = df['HomeAddress'].fillna('')
+        df['UserName'] = df['UserName'].fillna('')
+        df['TypeClass'] = df['TypeClass'].fillna('')
+        df.loc[df['HomeAddress'] == '0-0-0', 'HomeAddress'] = ''
+
+        df['StayText'] = df['StayTime'].apply(format_minutes_chinese)
+        df = df.merge(
+            address_df_origin[['HomeAddress', 'IsTenant']], on='HomeAddress', how='left'
+        )
+        df_item_mask = (
+                df['HomeAddress'].fillna('').str.strip().ne('') &
+                df['HomeAddress'].ne('0-0-0') &
+                df['IsTenant'].isna()
+        )
+        df.loc[df_item_mask, 'IsTenant'] = False
+        df['IsTenant'] = df['IsTenant'].map({True: '租客', False: '业主'})
+        df['IsTenant'] = df['IsTenant'].fillna('未绑定')
+        df = df.rename(columns={
+            'IsTenant': 'ResidentType'
+        })
+        df['HasCoupon'] = df['HomeAddress'].isin(coupon_df['HomeAddress'])
+        df['HasCoupon'] = df['HasCoupon'].map({True: '是', False: '否'})
+        df = df[
+            ['CPH', 'TypeClass', 'HomeAddress', 'UserName', 'VisitCount', 'InCount', 'OutCount',
+             'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount', 'StayText', 'LastInOutTime',
+             'ResidentType', 'InOutDays', 'HasCoupon', 'CompareType']]
+        df.to_pickle(df_path)
+
+    if return_type == 'json':
+        return df_to_dict(df)
+    else:
+        with pd.ExcelWriter(output_path) as writer:
+            export_to_excel(df, writer, sheet_name="数据对比结果")
         return output_path
 
 

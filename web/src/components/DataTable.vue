@@ -38,13 +38,26 @@
                 placement="bottom"
                 effect="light">
                 <el-select
-                  v-if="hasColumn(tabName, '是否参加问券')"
                   v-model="couponValue"
                   placeholder="请选择是否参加问券"
                   style="width: 80px">
                   <el-option label="全部" value="全部" />
                   <el-option label="是" value="是" />
                   <el-option label="否" value="否" />
+                </el-select>
+              </el-tooltip>
+              <el-tooltip
+                v-if="hasColumn(tabName, '对比类型')"
+                content="对比类型"
+                placement="bottom"
+                effect="light">
+                <el-select
+                  v-model="compareValue"
+                  placeholder="请选择是否参加问券"
+                  style="width: 90px">
+                  <el-option label="全部" value="全部" />
+                  <el-option label="未出现" value="未出现" />
+                  <el-option label="新出现" value="新出现" />
                 </el-select>
               </el-tooltip>
               <el-tooltip
@@ -159,6 +172,7 @@ const plateSearchValue = ref('');
 const typeClassValue = ref('全部');
 const tenantValue = ref('全部');
 const couponValue = ref('全部');
+const compareValue = ref('全部');
 const lastInOutTimeValue = ref([]);
 const emptyAddressValue = ref(false);
 const sortState = reactive<Record<string, SortState>>({});
@@ -231,6 +245,11 @@ const filteredData = computed(() => {
     if (couponValue.value && couponValue.value !== '全部') {
       result[tabName] = result[tabName].filter(
         row => couponValue.value === row['是否参加问券']
+      );
+    }
+    if (compareValue.value && compareValue.value !== '全部') {
+      result[tabName] = result[tabName].filter(
+        row => compareValue.value === row['对比类型']
       );
     }
     if (

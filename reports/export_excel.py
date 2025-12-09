@@ -38,7 +38,9 @@ columns_map = {
     'UserNameConsistency': '姓名一致性',
     'LastInOutTime': '最后进出时间',
     'ResidentType': '住户类型',
-    'InOutDays': '出入天数'
+    'InOutDays': '出入天数',
+    'Remark': '备注',
+    'CompareType': '对比类型'
 }
 
 def export_to_excel(df, writer, sheet_name="Sheet1"):

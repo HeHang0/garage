@@ -7,7 +7,8 @@ import gzip
 
 from analysis.access_analysis import analyze_user, pretty_compare_output, analyze_single_vehicle, \
     compare_multiple_vehicles
-from server.data import area_data, get_data, behavior_data, compute_income, record_data, user_data, cph_data
+from server.data import area_data, get_data, behavior_data, compute_income, record_data, user_data, cph_data, \
+    cph_compare_data
 
 _cur_dir = os.path.dirname(os.path.abspath(__file__))
 _front_dir = os.path.join(_cur_dir, '../frontend')
@@ -84,6 +85,29 @@ def get_cph_list_file():
         output,
         as_attachment=True,
         download_name="车辆记录.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+@app.route('/api/cphcompare', methods=['GET'])
+def get_cph_compare_list():
+    mstart = request.args.get('mstart', '')
+    mend = request.args.get('mend', '')
+    cstart = request.args.get('cstart', '')
+    cend = request.args.get('cend', '')
+    result = cph_compare_data(_df.copy(), _user_df.copy(), _address_df.copy(), _coupon_df.copy(), mstart, mend, cstart, cend)
+    return api_response(result)
+
+@app.route('/api/cphcompare/excel', methods=['GET'])
+def get_cph_compare_list_file():
+    mstart = request.args.get('mstart', '')
+    mend = request.args.get('mend', '')
+    cstart = request.args.get('cstart', '')
+    cend = request.args.get('cend', '')
+    output = cph_compare_data(_df.copy(), _user_df.copy(), _address_df.copy(), _coupon_df.copy(), mstart, mend, cstart, cend, 'excel')
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="车辆对比记录.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 

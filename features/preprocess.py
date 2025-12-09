@@ -44,10 +44,10 @@ def clean_parking_data(df, family_cph):
     df['IsDayOut'] = df['HourOut'].between(6, 18)
     df['IsDayIn'] = df['IsDayIn'] & (df['IsOnlyIn'] | df['IsDayOut'])
     df['IsDayOut'] = df['IsDayOut'] & (df['IsOnlyOut'] | df['IsDayOut'])
-    df['YearMonth'] = df['InTime'].dt.to_period('M').astype(str)
-    df['Date'] = df['InTime'].dt.strftime('%Y-%m-%d')
-    df['Year'] = df['InTime'].dt.year
-    df['Month'] = df['InTime'].dt.month
+    df['YearMonth'] = df['OutTime'].dt.to_period('M').astype(str)
+    df['Date'] = df['OutTime'].dt.strftime('%Y-%m-%d')
+    df['Year'] = df['OutTime'].dt.year
+    df['Month'] = df['OutTime'].dt.month
     df = df.sort_values(by='InTime', ascending=False).reset_index(drop=True)
     return df.drop(columns=['InLen', 'OutLen'])
 
