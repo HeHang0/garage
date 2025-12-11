@@ -543,7 +543,7 @@ const handleCphCompareSearch = async () => {
       params
     });
     if (response.data && response.columns) {
-      cphCompareData.value = { 数据对比结果: response };
+      cphCompareData.value = { '': response };
     } else {
       cphCompareData.value = response;
     }

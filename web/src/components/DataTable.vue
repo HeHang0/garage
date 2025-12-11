@@ -214,12 +214,10 @@ const originalData: Record<string, any[]> = {};
 const filteredData = computed(() => {
   const result: Record<string, any[]> = {};
   Object.keys(props.tableData).forEach(tabName => {
-    if (!originalData[tabName]) {
-      originalData[tabName] = columns_data_to_table_data(
-        props.tableData[tabName].columns,
-        props.tableData[tabName].data
-      );
-    }
+    originalData[tabName] = columns_data_to_table_data(
+      props.tableData[tabName].columns,
+      props.tableData[tabName].data
+    );
     result[tabName] = originalData[tabName];
     if (plateSearchValue.value) {
       result[tabName] = result[tabName].filter(row => {
