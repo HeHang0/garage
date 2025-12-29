@@ -16,7 +16,7 @@
 </template>
 
 <script lang="ts" setup>
-import { getOrderColumn } from '@/utils/tools';
+import { getOrderColumn, parseDurationToMinutes } from '@/utils/tools';
 import { SortBy, SortState, TableV2SortOrder } from 'element-plus';
 import { h, ref, watch } from 'vue';
 
@@ -52,6 +52,15 @@ const onSort = ({ key, order }: SortBy) => {
         return aV[0] - bV[0] || aV[1] - bV[1] || aV[2] - bV[2];
       } else {
         return bV[0] - aV[0] || bV[1] - aV[1] || bV[2] - aV[2];
+      }
+    }
+    if (key === '停车时长') {
+      const aV = parseDurationToMinutes(a[key] || '0天0小时0分');
+      const bV = parseDurationToMinutes(b[key] || '0天0小时0分');
+      if (order === TableV2SortOrder.ASC) {
+        return aV - bV;
+      } else {
+        return bV - aV;
       }
     }
     if (typeof a[key] === 'number' && typeof b[key] === 'number') {

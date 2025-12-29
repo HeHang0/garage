@@ -39,8 +39,14 @@ columns_map = {
     'LastInOutTime': '最后进出时间',
     'ResidentType': '住户类型',
     'InOutDays': '出入天数',
+    'OverNightDays': '过夜天数',
     'Remark': '备注',
-    'CompareType': '对比类型'
+    'CompareType': '对比类型',
+    'OverNightCount': '过夜天数',
+    'MaxConsecutiveOverNight': '最大过夜天数',
+    'ActiveDays': '活跃天数',
+    'TotalRecords': '总停车记录数',
+    'MaxStayHours': '最长单次停车时长(小时)'
 }
 
 def export_to_excel(df, writer, sheet_name="Sheet1"):

@@ -114,3 +114,19 @@ export const dateShortcuts = [
     }
   }
 ];
+
+export function parseDurationToMinutes(str: string): number {
+  let days = 0;
+  let hours = 0;
+  let minutes = 0;
+
+  const dayMatch = str.match(/(\d+)\s*天/);
+  const hourMatch = str.match(/(\d+)\s*小时/);
+  const minuteMatch = str.match(/(\d+)\s*分/);
+
+  if (dayMatch) days = parseInt(dayMatch[1], 10);
+  if (hourMatch) hours = parseInt(hourMatch[1], 10);
+  if (minuteMatch) minutes = parseInt(minuteMatch[1], 10);
+
+  return days * 24 * 60 + hours * 60 + minutes;
+}

@@ -140,7 +140,8 @@
 import {
   columns_data_to_table_data,
   getOrderColumn,
-  dateShortcuts
+  dateShortcuts,
+  parseDurationToMinutes
 } from '@/utils/tools';
 import dayjs from 'dayjs';
 import {
@@ -209,7 +210,6 @@ const onSort = ({ key, order }: SortBy) => {
 };
 
 const originalData: Record<string, any[]> = {};
-
 // 过滤数据
 const filteredData = computed(() => {
   const result: Record<string, any[]> = {};
@@ -288,22 +288,12 @@ const filteredData = computed(() => {
       }
     }
     if (key === '停车时长') {
-      const aV = (a[key] || '0-0-0')
-        .replace('天', '-')
-        .replace('小时', '-')
-        .replace('分', '-')
-        .split('-')
-        .map((s: string) => parseInt(s));
-      const bV = (b[key] || '0-0-0')
-        .replace('天', '-')
-        .replace('小时', '-')
-        .replace('分', '-')
-        .split('-')
-        .map((s: string) => parseInt(s));
+      const aV = parseDurationToMinutes(a[key] || '0天0小时0分');
+      const bV = parseDurationToMinutes(b[key] || '0天0小时0分');
       if (order === TableV2SortOrder.ASC) {
-        return aV[0] - bV[0] || aV[1] - bV[1] || aV[2] - bV[2];
+        return aV - bV;
       } else {
-        return bV[0] - aV[0] || bV[1] - aV[1] || bV[2] - aV[2];
+        return bV - aV;
       }
     }
     if (typeof a[key] === 'number' && typeof b[key] === 'number') {

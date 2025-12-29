@@ -1,8 +1,7 @@
 import hashlib
 import os
 import pickle
-from datetime import datetime
-import time
+from datetime import datetime, time, timedelta
 
 import pandas as pd
 
@@ -262,8 +261,125 @@ def calc_true_len(lst):
             result += 1
     return result
 
+def calc_night_overlap(row):
+    enter = row['InTime']
+    leave = row['OutTime']
+
+    # 防御性判断
+    if leave <= enter:
+        return 0
+
+    total_overlap = timedelta(0)
+
+    # 停车可能跨多天，需要逐日算夜间窗口
+    cur_date = enter.date() - timedelta(days=1)
+    end_date = leave.date()
+
+    while cur_date <= end_date:
+        night_start = pd.Timestamp.combine(cur_date, time(22, 0))
+        night_end = pd.Timestamp.combine(cur_date + timedelta(days=1), time(5, 0))
+
+        overlap_start = max(enter, night_start)
+        overlap_end = min(leave, night_end)
+
+        if overlap_start < overlap_end:
+            total_overlap += (overlap_end - overlap_start)
+
+        cur_date += timedelta(days=1)
+
+    return total_overlap.total_seconds() / 3600  # 返回小时
+
+def get_night_overlap_data(df, name):
+    cph_over_night_path = os.path.join(_data_dir, name)
+    if os.path.exists(cph_over_night_path):
+        valid_df = pickle.load(open(cph_over_night_path, "rb"))
+    else:
+        valid_df = df[
+            (df['InTime'] != df['OutTime']) &
+            (~df['IsOnlyIn']) &
+            (~df['IsOnlyOut'])
+            ].copy()
+        valid_df['NightHours'] = valid_df.apply(calc_night_overlap, axis=1)
+        valid_df['IsOverNight'] = valid_df['NightHours'] >= 3.5
+        valid_df = valid_df[valid_df['IsOverNight']].groupby(['CPH', 'YearMonth'], as_index=False).agg(
+            OverNightDays=('CPH', lambda x: len(x))
+        )
+        valid_df.to_pickle(cph_over_night_path)
+    return valid_df
+
+def calc_max_consecutive_days(dates):
+    dates = sorted(set(dates))
+    max_streak = cur = 1
+
+    for i in range(1, len(dates)):
+        if (dates[i] - dates[i-1]).days == 1:
+            cur += 1
+            max_streak = max(max_streak, cur)
+        else:
+            cur = 1
+    return max_streak
+
+def get_zombie_data(df, name):
+    cph_zombie_path = os.path.join(_data_dir, name)
+    if os.path.exists(cph_zombie_path):
+        zombies = pickle.load(open(cph_zombie_path, "rb"))
+    else:
+        valid_df = df[
+            (df['InTime'] != df['OutTime']) &
+            (~df['IsOnlyIn']) &
+            (~df['IsOnlyOut'])
+            ].copy()
+        valid_df['NightHours'] = valid_df.apply(calc_night_overlap, axis=1)
+        valid_df['IsOverNight'] = valid_df['NightHours'] >= 3.5
+        # valid_df = (
+        #     valid_df[valid_df['IsOverNight']]
+        #     .groupby('CPH')
+        #     .size()
+        #     .reset_index(name='OverNightCount')
+        # )
+        overnight_df = valid_df[valid_df['IsOverNight']].copy()
+        overnight_df['NightDate'] = overnight_df['InTime'].dt.date
+        consecutive_stat = (
+            overnight_df
+            .groupby('CPH')['NightDate']
+            .apply(calc_max_consecutive_days)
+            .reset_index(name='MaxConsecutiveOverNight')
+        )
+        activity_stat = (
+            valid_df
+            .groupby('CPH')
+            .agg(
+                TotalRecords=('InTime', 'count'),
+                OverNightCount=('IsOverNight', 'sum'),
+                ActiveDays=('InTime', lambda x: x.dt.date.nunique())
+            )
+            .reset_index()
+        )
+        valid_df['StayHours'] = (
+                                        valid_df['OutTime'] - valid_df['InTime']
+                                ).dt.total_seconds() / 3600
+        long_stay = (
+            valid_df
+            .groupby('CPH')['StayHours']
+            .max()
+            .reset_index(name='MaxStayHours')
+        )
+        zombie_profile = (
+            consecutive_stat
+            .merge(activity_stat, on='CPH', how='left')
+            .merge(long_stay, on='CPH', how='left')
+        )
+        zombies = zombie_profile[
+            (zombie_profile['MaxConsecutiveOverNight'] >= 7) &
+            (zombie_profile['OverNightCount'] / zombie_profile['ActiveDays'] > 0.8)
+            ]
+        zombies['MaxStayHours'] = zombies['MaxStayHours'].round(0)
+        zombies.to_pickle(cph_zombie_path)
+    return zombies
+
+
 def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, return_type='json'):
-    timestamp = get_timestamp_text(start, end, order)
+    timestamp = get_timestamp_text(start, end)
     df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.pkl")
     last_ym_df_path = os.path.join(_data_dir, f"cache.{timestamp}.cph.max.date.pkl")
     output_path = os.path.join(_data_dir, f"{timestamp}.cph.xlsx")
@@ -288,7 +404,7 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
     last_df['LastInOutTime'] = last_df['LastInOutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
     last_ym_df['LastInOutTime'] = last_ym_df['LastInOutTime'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
-    cph_date_path = os.path.join(_data_dir, f"cph_date.pkl")
+    cph_date_path = os.path.join(_data_dir, f"{timestamp}.cph.date.pkl")
     if os.path.exists(cph_date_path):
         cph_date_df = pickle.load(open(cph_date_path, "rb"))
     else:
@@ -298,6 +414,8 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
         )
         cph_date_df.to_pickle(cph_date_path)
 
+    night_overlap_data = get_night_overlap_data(df, f"{timestamp}.cph.night.overlap.pkl")
+    zombies = get_zombie_data(df, f"{timestamp}.cph.zombies.pkl")
     if os.path.exists(df_path):
         df = pickle.load(open(df_path, "rb"))
     else:
@@ -351,6 +469,9 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
             cph_date_df_month = cph_date_df[cph_date_df['YearMonth'] == item].groupby(['CPH'], as_index=False).agg(
                 InOutDays=('InOutDays', lambda x: sum(x))
             )
+            night_overlap_data_month = night_overlap_data[night_overlap_data['YearMonth'] == item].groupby(['CPH'], as_index=False).agg(
+                OverNightDays=('OverNightDays', lambda x: sum(x))
+            )
         else:
             df_item = df.groupby(['CPH', 'TypeClass', 'HomeAddress', 'UserName'], as_index=False)[['StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']].sum().copy()
             df_item = df_item.merge(
@@ -359,6 +480,9 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
             cph_date_df_month = cph_date_df.groupby(['CPH'], as_index=False).agg(
                 InOutDays=('InOutDays', lambda x: sum(x))
             )
+            night_overlap_data_month = night_overlap_data.groupby(['CPH'], as_index=False).agg(
+                OverNightDays=('OverNightDays', lambda x: sum(x))
+            )
         df_item['StayText'] = df_item['StayTime'].apply(format_minutes_chinese)
         df_item = df_item.merge(
             address_df_origin[['HomeAddress', 'IsTenant']], on='HomeAddress', how='left'
@@ -366,6 +490,11 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
         df_item = df_item.merge(
             cph_date_df_month, on='CPH', how='left'
         )
+        df_item = df_item.merge(
+            night_overlap_data_month, on='CPH', how='left'
+        )
+        df_item['OverNightDays'] = df_item['OverNightDays'].fillna(0)
+        df_item['InOutDays'] = df_item['InOutDays'].fillna(0)
         # mask = (df_item['IsTenant'] == False) & (df_item['HomeAddress'].str.strip() == '')
         # df_item.loc[mask, 'IsTenant'] = None
         df_item_mask = (
@@ -392,11 +521,15 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
         result = {}
         for item in df_name_arr:
             result[item['name']] = df_to_dict(item['df'])
+            if item['name'] == '汇总':
+                result['僵尸车'] = df_to_dict(zombies)
         return result
     else:
         with pd.ExcelWriter(output_path) as writer:
             for item in df_name_arr:
                 export_to_excel(item['df'], writer, sheet_name=item['name'])
+                if item['name'] == '汇总':
+                    export_to_excel(zombies, writer, sheet_name='僵尸车')
         return output_path
 
 def cph_compare_data(df, user_df, address_df_origin, coupon_df, mstart, mend, cstart, cend, return_type='json'):
