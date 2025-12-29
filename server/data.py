@@ -292,8 +292,8 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
     if os.path.exists(cph_date_path):
         cph_date_df = pickle.load(open(cph_date_path, "rb"))
     else:
-        cph_date_df = df[['CPH', 'Date']].drop_duplicates(subset=['CPH', 'Date'])
-        cph_date_df = cph_date_df.groupby(['CPH'], as_index=False).agg(
+        cph_date_df = df[['CPH', 'Date', 'YearMonth']].drop_duplicates(subset=['CPH', 'Date', 'YearMonth'])
+        cph_date_df = cph_date_df.groupby(['CPH', 'YearMonth'], as_index=False).agg(
             InOutDays=('CPH', lambda x: len(x))
         )
         cph_date_df.to_pickle(cph_date_path)
@@ -348,17 +348,23 @@ def cph_data(df, user_df, address_df_origin, coupon_df, order, start, end, retur
             df_item = df_item.merge(
                 last_ym_df[last_ym_df['YearMonth'] == item][['CPH', 'LastInOutTime']], on='CPH', how='left'
             )
+            cph_date_df_month = cph_date_df[cph_date_df['YearMonth'] == item].groupby(['CPH'], as_index=False).agg(
+                InOutDays=('InOutDays', lambda x: sum(x))
+            )
         else:
             df_item = df.groupby(['CPH', 'TypeClass', 'HomeAddress', 'UserName'], as_index=False)[['StayTime', 'VisitCount', 'InCount', 'OutCount', 'DayInCount', 'DayOutCount', 'NightInCount', 'NightOutCount']].sum().copy()
             df_item = df_item.merge(
                 last_df, on='CPH', how='left'
+            )
+            cph_date_df_month = cph_date_df.groupby(['CPH'], as_index=False).agg(
+                InOutDays=('InOutDays', lambda x: sum(x))
             )
         df_item['StayText'] = df_item['StayTime'].apply(format_minutes_chinese)
         df_item = df_item.merge(
             address_df_origin[['HomeAddress', 'IsTenant']], on='HomeAddress', how='left'
         )
         df_item = df_item.merge(
-            cph_date_df, on='CPH', how='left'
+            cph_date_df_month, on='CPH', how='left'
         )
         # mask = (df_item['IsTenant'] == False) & (df_item['HomeAddress'].str.strip() == '')
         # df_item.loc[mask, 'IsTenant'] = None
